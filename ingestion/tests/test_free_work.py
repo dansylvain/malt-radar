@@ -22,6 +22,7 @@ RAW_SAMPLE = {
 def test_to_mission_maps_fields():
     mission = _to_mission(RAW_SAMPLE)
 
+    assert mission.source == "free_work"
     assert mission.external_id == 659126
     assert mission.url == "https://www.free-work.com/fr/tech-it/jobs/consultant-pmo-support-gestion-de-projet"
     assert mission.skills == ["Pilotage"]

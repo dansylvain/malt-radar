@@ -8,36 +8,17 @@ calls. See SOURCES.md for the legal/robots.txt review of this source.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from typing import Any, Iterator
 
 import httpx
+
+from malt_radar_ingestion.models import Mission
 
 USER_AGENT = "MaltRadarBot/0.1 (personal market-research project; contact: dansylvain84@gmail.com)"
 BASE_URL = "https://www.free-work.com/api/job_postings"
 ITEMS_PER_PAGE = 30
 REQUEST_DELAY_SECONDS = 1.5
 MAX_RETRIES = 3
-
-
-@dataclass
-class Mission:
-    external_id: int
-    slug: str
-    url: str
-    title: str
-    job_name: str
-    skills: list[str]
-    min_daily_salary: float | None
-    max_daily_salary: float | None
-    currency: str | None
-    remote_mode: str | None
-    contracts: list[str]
-    duration_value: int | None
-    duration_period: str | None
-    location_label: str | None
-    company_name: str | None
-    published_at: str | None
 
 
 def _get_with_retry(client: httpx.Client, url: str) -> httpx.Response:
@@ -58,6 +39,7 @@ def _to_mission(raw: dict[str, Any]) -> Mission:
     location = raw.get("location") or {}
     company = raw.get("company") or {}
     return Mission(
+        source="free_work",
         external_id=raw["id"],
         slug=raw["slug"],
         url=f"https://www.free-work.com/fr/tech-it/jobs/{raw['slug']}",
