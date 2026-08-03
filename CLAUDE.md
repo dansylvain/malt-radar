@@ -53,7 +53,9 @@ Toute nouvelle source doit être validée (robots.txt + CGU) et ajoutée à
 
 ## Stack par composant
 
-- Ingestion : Python, Playwright, SQLite.
+- Ingestion : Python, `httpx` (Free-Work : API JSON publique directe, pas
+  de rendu navigateur nécessaire — à revérifier par source, Comet n'est pas
+  encore implémenté), SQLite.
 - Traitement : Ollama (Qwen 2.5 3B), JSON Schema strict avec validation +
   retry.
 - Synthèse : API Claude, appelée uniquement pour la synthèse hebdomadaire

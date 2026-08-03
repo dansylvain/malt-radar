@@ -13,7 +13,11 @@
       "Bash(.venv/bin/pip install *)",
       "Bash(.venv/bin/pytest -q)",
       "Bash(code --version)",
-      "Bash(code --list-extensions)"
+      "Bash(code --list-extensions)",
+      "Bash(curl *)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s -A \"MaltRadarBot/0.1 \\(personal market-research project; contact: dansylvain84@gmail.com\\)\" \"https://www.free-work.com/api/job_postings?itemsPerPage=5&premium=false\")",
+      "Bash(python3 -m json.tool)"
     ]
   }
 }

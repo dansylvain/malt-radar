@@ -44,9 +44,15 @@ tout code d'ingestion — voir la contrainte associée dans `CLAUDE.md`.
   signal de vigilance, pas une interdiction générale.
 - **CGU** : texte exact non localisé par recherche — à vérifier avant mise
   en production du scraper.
-- **Décision** : scraping automatisé Playwright, poli (User-Agent
-  identifié + contact, rate-limit ~1x/jour, retry/backoff sur erreurs
-  réseau et 429).
+- **Décision** : implémenté (`ingestion/src/malt_radar_ingestion/sources/free_work.py`).
+  Le site expose une **API JSON publique non authentifiée**
+  (`/api/job_postings`, format Hydra/API Platform, ~9 700 offres, pagination
+  standard) — c'est celle que le frontend du site appelle lui-même. Pas
+  besoin de Playwright/rendu navigateur : client `httpx` avec User-Agent
+  identifié, délai de 1,5s entre pages, retry/backoff sur 429 et erreurs
+  réseau. Filtré sur `contracts` contenant `"contractor"` (missions
+  freelance, pas les CDI). Champs récupérés : titre, TJM (min/max daily
+  salary), compétences, lieu, entreprise, télétravail, durée.
 
 ## Comet
 
