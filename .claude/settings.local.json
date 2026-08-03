@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /home/dsylvain/projects/malt_radar log --oneline -20)",
+      "Bash(git -C /home/dsylvain/projects/malt_radar show --stat HEAD)",
+      "WebFetch(domain:www.linkedin.com)",
+      "WebFetch(domain:www.malt.fr)",
+      "WebFetch(domain:www.comet.co)",
+      "WebFetch(domain:www.free-work.com)",
+      "WebSearch"
+    ]
+  }
+}
