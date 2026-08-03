@@ -5,8 +5,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-User=CHANGE_ME
-WorkingDirectory=/CHANGE_ME/malt_radar/ingestion
-EnvironmentFile=/CHANGE_ME/malt_radar/ingestion/.env
-ExecStart=/CHANGE_ME/malt_radar/ingestion/.venv/bin/python -m malt_radar_ingestion.ingest free_work --max-pages 5
-ExecStart=/CHANGE_ME/malt_radar/ingestion/.venv/bin/python -m malt_radar_ingestion.ingest france_travail --max-pages 3
+User=root
+WorkingDirectory=/root/projects/malt-radar/ingestion
+EnvironmentFile=/root/projects/malt-radar/ingestion/.env
+ExecStart=/root/projects/malt-radar/ingestion/.venv/bin/python -m malt_radar_ingestion.ingest free_work --max-pages 5
+ExecStart=/root/projects/malt-radar/ingestion/.venv/bin/python -m malt_radar_ingestion.ingest france_travail --max-pages 3
