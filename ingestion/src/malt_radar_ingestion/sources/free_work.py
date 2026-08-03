@@ -59,10 +59,21 @@ def _to_mission(raw: dict[str, Any]) -> Mission:
     )
 
 
-def fetch_missions(max_pages: int = 5, freelance_only: bool = True) -> Iterator[Mission]:
+def fetch_missions(
+    max_pages: int = 5,
+    freelance_only: bool = True,
+    client: httpx.Client | None = None,
+) -> Iterator[Mission]:
     """Yield missions from Free-Work, paginating politely (delay between pages,
-    retry/backoff on errors and 429s, identified User-Agent)."""
-    with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=15.0) as client:
+    retry/backoff on errors and 429s, identified User-Agent).
+
+    `client` is an injection point for tests (a client wired to
+    `httpx.MockTransport`) — leave it unset in normal use.
+    """
+    owns_client = client is None
+    if owns_client:
+        client = httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=15.0)
+    try:
         page = 1
         while page <= max_pages:
             url = f"{BASE_URL}?itemsPerPage={ITEMS_PER_PAGE}&premium=false&page={page}"
@@ -79,6 +90,9 @@ def fetch_missions(max_pages: int = 5, freelance_only: bool = True) -> Iterator[
                 break
             page += 1
             time.sleep(REQUEST_DELAY_SECONDS)
+    finally:
+        if owns_client:
+            client.close()
 
 
 if __name__ == "__main__":
