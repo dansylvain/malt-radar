@@ -39,13 +39,13 @@ ingest-free-work:
 	cd ingestion && .venv/bin/python -m malt_radar_ingestion.ingest free_work --max-pages 3
 
 ingest-france-travail:
-	cd ingestion && set -a && . .env && set +a && .venv/bin/python -m malt_radar_ingestion.ingest france_travail --max-pages 3
+	cd ingestion && set -a && . ./.env && set +a && .venv/bin/python -m malt_radar_ingestion.ingest france_travail --max-pages 3
 
 run-aggregator:
-	cd aggregator && set -a && . .env && set +a && .venv/bin/python -m malt_radar_aggregator.server
+	cd aggregator && set -a && . ./.env && set +a && .venv/bin/python -m malt_radar_aggregator.server
 
 run-worker:
-	cd worker && set -a && . .env && set +a && .venv/bin/python -m malt_radar_worker.run --limit 20
+	cd worker && set -a && . ./.env && set +a && .venv/bin/python -m malt_radar_worker.run --limit 20
 
 clean:
 	rm -rf ingestion/.venv ingestion/.pytest_cache aggregator/.venv aggregator/.pytest_cache worker/.venv worker/.pytest_cache
