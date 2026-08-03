@@ -23,7 +23,11 @@
       "Bash(curl -s -A \"MaltRadarBot/0.1 \\(personal market-research project; contact: dansylvain84@gmail.com\\)\" \"https://www.comet.co/sitemap.xml\")",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(python3 *)",
-      "WebFetch(domain:francetravail.io)"
+      "WebFetch(domain:francetravail.io)",
+      "Bash(make --version)",
+      "Bash(make help *)",
+      "Bash(make test *)",
+      "Bash(make ingest-free-work *)"
     ]
   }
 }
