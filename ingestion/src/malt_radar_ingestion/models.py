@@ -13,6 +13,7 @@ class Mission:
     url: str
     title: str
     job_name: str
+    description: str | None
     skills: list[str]
     min_daily_salary: float | None
     max_daily_salary: float | None

@@ -80,16 +80,25 @@ un dossier à la racine, déployé/exécuté sur une seule machine du cluster.
 - `ingestion/` — Python (src-layout, `pyproject.toml` standard, pas
   d'uv/poetry sur ce poste). Scraper Free-Work/Comet + client France
   Travail. Tourne sur la VPS Hetzner. **Existe déjà** (Phase 1).
-- `worker/` — Pi5, Ollama/Qwen 2.5 3B, extraction d'entités. Pas encore créé
-  (Phase 2).
-- `aggregator/` — VPS, synthèse hebdomadaire + appel API Claude. Pas encore
-  créé (Phase 3).
+- `worker/` — Pi5, Ollama/Qwen 2.5 3B, extraction d'entités + génération de
+  fiches Markdown. Pull les missions non traitées / push les fiches vers
+  `aggregator/` (jamais de serveur en écoute sur le Pi5 — voir
+  `ROADMAP.md` Phase 2). **Existe déjà** (Phase 2, code complet —
+  déploiement Pi5 restant).
+- `aggregator/` — VPS, API HTTP pull/push consommée par `worker/` (amorcé
+  en Phase 2) ; la synthèse hebdomadaire + appel API Claude viendront s'y
+  greffer en Phase 3. Dépend de `ingestion/` (réutilise `storage.py` en
+  éditable local plutôt que de dupliquer le schéma SQLite). **Existe
+  déjà** (squelette Phase 2 — déploiement VPS restant).
 - `tui/` — Rust workspace (Ratatui/Tokio), poste de travail/WSL2. Pas
   encore créé (Phase 4).
 
 Chaque service a son propre gestionnaire de dépendances/build (pas de
-tooling partagé forcé entre Python et Rust). `.gitignore` à la racine
-couvre les deux écosystèmes.
+tooling partagé forcé entre Python et Rust) — exception : `aggregator/`
+installe `ingestion/` en dépendance locale éditable (`pip install -e
+../ingestion`) pour réutiliser son `storage.py`/`Mission` plutôt que de
+dupliquer le schéma SQLite ; les deux tournent sur la même machine (VPS).
+`.gitignore` à la racine couvre les deux écosystèmes.
 
 ## Workflow git
 

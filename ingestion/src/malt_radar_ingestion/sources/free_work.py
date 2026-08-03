@@ -45,6 +45,7 @@ def _to_mission(raw: dict[str, Any]) -> Mission:
         url=f"https://www.free-work.com/fr/tech-it/jobs/{raw['slug']}",
         title=raw["title"],
         job_name=(raw.get("job") or {}).get("name", ""),
+        description=raw.get("description"),
         skills=[s["name"] for s in raw.get("skills", [])],
         min_daily_salary=raw.get("minDailySalary"),
         max_daily_salary=raw.get("maxDailySalary"),

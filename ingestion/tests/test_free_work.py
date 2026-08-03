@@ -5,6 +5,7 @@ RAW_SAMPLE = {
     "slug": "consultant-pmo-support-gestion-de-projet",
     "title": "Consultant PMO / Support Gestion de Projet",
     "job": {"name": "Assistant·e chef·fe de projet"},
+    "description": "<p>Mission de pilotage PMO pour un client grand compte.</p>",
     "skills": [{"name": "Pilotage"}],
     "minDailySalary": 400,
     "maxDailySalary": 550,
@@ -25,6 +26,7 @@ def test_to_mission_maps_fields():
     assert mission.source == "free_work"
     assert mission.external_id == 659126
     assert mission.url == "https://www.free-work.com/fr/tech-it/jobs/consultant-pmo-support-gestion-de-projet"
+    assert mission.description == "<p>Mission de pilotage PMO pour un client grand compte.</p>"
     assert mission.skills == ["Pilotage"]
     assert mission.min_daily_salary == 400
     assert mission.max_daily_salary == 550

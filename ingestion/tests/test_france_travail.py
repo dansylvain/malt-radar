@@ -10,6 +10,7 @@ RAW_SAMPLE = {
     "intitule": "Ingénieur IA / LLM (H/F)",
     "appellationlibelle": "Ingénieur / Ingénieure intelligence artificielle",
     "romeLibelle": "Études et développement informatique",
+    "description": "Nous recherchons un ingénieur IA pour développer des solutions RAG.",
     "competences": [{"libelle": "Python"}, {"libelle": "RAG"}],
     "lieuTravail": {"libelle": "Paris (75)"},
     "entreprise": {"nom": "Acme Corp"},
@@ -32,6 +33,7 @@ def test_to_mission_maps_fields():
     assert mission.external_id == "197WXYZ"
     assert mission.title == "Ingénieur IA / LLM (H/F)"
     assert mission.job_name == "Ingénieur / Ingénieure intelligence artificielle"
+    assert mission.description == "Nous recherchons un ingénieur IA pour développer des solutions RAG."
     assert mission.skills == ["Python", "RAG"]
     assert mission.location_label == "Paris (75)"
     assert mission.company_name == "Acme Corp"

@@ -1,0 +1,20 @@
+[project]
+name = "malt-radar-worker"
+version = "0.1.0"
+description = "Pi5 worker for Malt-Radar: Ollama/Qwen entity extraction, Markdown fiche generation (Phase 2)"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "pydantic",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/malt_radar_worker"]

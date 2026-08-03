@@ -52,18 +52,50 @@ contact, pas de contournement d'authentification, fréquence raisonnable
   — je n'ai pas d'accès SSH à la VPS pour le faire moi-même.
 - **Sortie** : collecte stable pendant 1 semaine sans blocage IP ni erreur
   non gérée — à confirmer une fois le timer actif sur la VPS.
+- ✅ **Amendement (2026-08-03, pour Phase 2)** : `Mission` gagne un champ
+  `description` (texte complet, mappé depuis les deux sources) — sans ça
+  la catégorisation LLM de Phase 2 n'a que titre + intitulé + compétences
+  à se mettre sous la dent. Migration SQLite idempotente (`storage.py`
+  ajoute la colonne via `ALTER TABLE` si absente) : pas besoin de
+  redéployer une DB neuve sur la VPS.
 
-## Phase 2 — Traitement (Raspberry Pi 5, Ollama/Qwen 2.5 3B)
-- Ollama + `qwen2.5:3b` sur le Pi.
-- Endpoint HTTP minimal, réception du JSON brut via Tailscale.
-- Prompt + JSON Schema pour extraction (TJM, stack, durée, niveau,
-  catégorie RAG/Agent/Vision/Fine-tuning).
-- Validation stricte du schema, retry si échec de parsing.
-- Génération de fiches Markdown + frontmatter YAML.
+## Phase 2 — Traitement (Raspberry Pi 5, Ollama/Qwen 2.5 3B) — ✅ code complet, déploiement restant
+Décisions d'architecture (2026-08-03) :
+- **Flux missions VPS→Pi5 : pull, pas push.** Le Pi5 n'est pas garanti
+  disponible en permanence (coupures électriques/réseau domestiques) —
+  contrairement au VPS. Un endpoint HTTP toujours en écoute sur le Pi5
+  aurait réintroduit cette dépendance. Le worker va donc chercher son
+  travail sur son propre timer, plutôt que de le recevoir en push.
+- **`aggregator/` amorcé dès maintenant** (normalement Phase 3) pour
+  héberger le service HTTP côté VPS dont le worker a besoin — le VPS
+  reste le hub toujours disponible du cluster.
+- Suivi d'état : colonne `processed`/`processed_at` sur `missions`
+  (`ingestion/storage.py`), jamais réinitialisée par un re-scrape.
+
+- ✅ `aggregator/` : `GET /missions/unprocessed` + `POST /fiches`
+  (auth par token partagé, écriture des fiches sur disque + flag
+  processed). Réutilise `ingestion/storage.py` en dépendance locale.
+- ✅ `worker/` : client Ollama (`qwen2.5:3b`), prompt + JSON Schema strict
+  (TJM, stack, durée, niveau, catégorie RAG/Agent/Vision/Fine-tuning),
+  validation Pydantic + retry sur échec de parsing/schema.
+- ✅ Génération de fiches Markdown + frontmatter YAML (`worker/fiche.py`).
+- ✅ Client HTTP pull/push (`worker/client.py`) + CLI (`worker/run.py`).
+- ✅ Unité systemd timer (`worker/deploy/`), décalée après le timer
+  d'ingestion (7h UTC vs 6h) pour trouver les missions du jour déjà en
+  base.
+- ⬜ **Reste à faire par Dan** : sur le Pi5, installer Ollama + `ollama
+  pull qwen2.5:3b`, créer le venv (`worker/`), remplir `worker/.env`
+  (`AGGREGATOR_URL`, `AGGREGATOR_API_TOKEN`) ; sur le VPS, créer le venv
+  `aggregator/`, choisir/poser `AGGREGATOR_API_TOKEN` (même secret des
+  deux côtés), lancer le serveur (`aggregator/README.md`) ; adapter les
+  `CHANGE_ME` des unités systemd et les activer.
 - **Sortie** : taux d'extraction correcte > 90 % sur un échantillon annoté
-  manuellement.
+  manuellement — à mesurer une fois le pipeline tournant en conditions
+  réelles sur le Pi5.
 
 ## Phase 3 — Synthèse (VPS + API Claude)
+- ✅ `aggregator/` existe déjà (amorcé en Phase 2) avec l'API HTTP
+  pull/push ; cette phase l'étend, ne repart pas de zéro.
 - Agrégation hebdomadaire des fiches Markdown.
 - Calcul des métriques (TJM moyen par stack, fréquence des compétences,
   évolution semaine/semaine).

@@ -19,6 +19,11 @@ board like Free-Work. Its `salaire` field is free text (often an annual
 salary range), not a clean daily rate — kept as `raw_salary_text` on the
 Mission for the Phase 2 LLM extraction step to parse later, rather than
 guessing a TJM here.
+
+The job description text is mapped from the `description` field, the
+standard name in this API's documented schema — like DEFAULT_SCOPE below,
+this was implemented against public docs without a live account to verify
+against, so double-check it in your app's dashboard/sample responses.
 """
 
 from __future__ import annotations
@@ -95,6 +100,7 @@ def _to_mission(raw: dict[str, Any]) -> Mission:
         url=origine.get("urlOrigine") or f"https://candidat.francetravail.fr/offres/recherche/detail/{raw['id']}",
         title=raw.get("intitule", ""),
         job_name=raw.get("appellationlibelle") or raw.get("romeLibelle") or "",
+        description=raw.get("description"),
         skills=[c["libelle"] for c in raw.get("competences", []) if c.get("libelle")],
         min_daily_salary=None,
         max_daily_salary=None,
