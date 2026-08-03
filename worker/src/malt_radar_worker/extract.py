@@ -18,6 +18,10 @@ from malt_radar_worker.schema import Extraction
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
+# CPU-only inference on a Pi5 is slow and varies a lot with description
+# length — 60s turned out too tight in practice and blew up as an
+# unhandled httpx.ReadTimeout instead of a clean retry.
+OLLAMA_TIMEOUT_SECONDS = float(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "180"))
 MAX_RETRIES = 3
 DESCRIPTION_CHAR_BUDGET = 4000
 
@@ -73,21 +77,21 @@ def extract(mission: dict, client: httpx.Client | None = None) -> Extraction:
     malformed/invalid output. Raises ExtractionFailed once retries run out."""
     owns_client = client is None
     if owns_client:
-        client = httpx.Client(timeout=60.0)
+        client = httpx.Client(timeout=OLLAMA_TIMEOUT_SECONDS)
     try:
         prompt = build_prompt(mission)
         last_error: Exception | None = None
         for _attempt in range(1, MAX_RETRIES + 1):
-            response = client.post(
-                f"{OLLAMA_HOST}/api/generate",
-                json={"model": OLLAMA_MODEL, "prompt": prompt, "format": "json", "stream": False},
-            )
-            response.raise_for_status()
-            raw_output = response.json()["response"]
             try:
+                response = client.post(
+                    f"{OLLAMA_HOST}/api/generate",
+                    json={"model": OLLAMA_MODEL, "prompt": prompt, "format": "json", "stream": False},
+                )
+                response.raise_for_status()
+                raw_output = response.json()["response"]
                 data = json.loads(raw_output)
                 return Extraction.model_validate(data)
-            except (json.JSONDecodeError, ValidationError) as exc:
+            except (httpx.HTTPError, json.JSONDecodeError, ValidationError) as exc:
                 last_error = exc
                 continue
         raise ExtractionFailed(

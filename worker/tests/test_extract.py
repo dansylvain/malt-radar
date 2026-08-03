@@ -103,3 +103,30 @@ def test_extract_raises_after_exhausting_retries():
 
     with pytest.raises(ExtractionFailed):
         extract(MISSION, client=client)
+
+
+def test_extract_retries_on_read_timeout_then_succeeds():
+    attempts = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        if attempts["count"] < 2:
+            raise httpx.ReadTimeout("timed out", request=request)
+        return _ollama_response(VALID_JSON)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    extraction = extract(MISSION, client=client)
+
+    assert attempts["count"] == 2
+    assert extraction.categorie == "RAG"
+
+
+def test_extract_raises_extraction_failed_after_repeated_timeouts():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    with pytest.raises(ExtractionFailed):
+        extract(MISSION, client=client)
