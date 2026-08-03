@@ -2,7 +2,7 @@
 name = "malt-radar-ingestion"
 version = "0.1.0"
 description = "Ingestion service for Malt-Radar: Free-Work + France Travail API"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "httpx",
 ]
