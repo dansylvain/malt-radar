@@ -64,6 +64,27 @@ Toute nouvelle source doit être validée (robots.txt + CGU) et ajoutée à
 
 ## Conventions
 
-Le repo est un mono-repo multi-langage (Python, Rust) organisé par service
-(ingestion, worker Pi5, TUI). Structure de dossiers à définir au démarrage
-de la Phase 1 — mettre à jour cette section une fois posée.
+Mono-repo multi-langage (Python, Rust), organisé par service. Un service =
+un dossier à la racine, déployé/exécuté sur une seule machine du cluster.
+
+- `ingestion/` — Python (src-layout, `pyproject.toml` standard, pas
+  d'uv/poetry sur ce poste). Scraper Free-Work/Comet + client France
+  Travail. Tourne sur la VPS Hetzner. **Existe déjà** (Phase 1).
+- `worker/` — Pi5, Ollama/Qwen 2.5 3B, extraction d'entités. Pas encore créé
+  (Phase 2).
+- `aggregator/` — VPS, synthèse hebdomadaire + appel API Claude. Pas encore
+  créé (Phase 3).
+- `tui/` — Rust workspace (Ratatui/Tokio), poste de travail/WSL2. Pas
+  encore créé (Phase 4).
+
+Chaque service a son propre gestionnaire de dépendances/build (pas de
+tooling partagé forcé entre Python et Rust). `.gitignore` à la racine
+couvre les deux écosystèmes.
+
+## Workflow git
+
+**Dan gère git lui-même** (add/commit/push). Ne pas exécuter de commandes
+git qui modifient l'état du dépôt (commit, push, etc.) sauf demande
+explicite dans le message en cours. Un simple rappel ("tu voudras sans
+doute committer ça") est bienvenu quand il y a des changements en attente,
+mais l'action reste la sienne.
