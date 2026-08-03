@@ -36,3 +36,28 @@ export FRANCE_TRAVAIL_CLIENT_SECRET=...
 python -m malt_radar_ingestion.ingest free_work --max-pages 3
 python -m malt_radar_ingestion.ingest france_travail --max-pages 3
 ```
+
+## Déploiement (VPS Hetzner) : timer systemd quotidien
+
+Unités dans `deploy/` : `malt-radar-ingest.service` (lance les deux
+sources l'une après l'autre) + `malt-radar-ingest.timer` (déclenchement
+quotidien à 6h + jitter de 30 min, rattrapage si la VPS était éteinte).
+
+Sur la VPS, une fois le repo cloné et le venv créé (voir Setup ci-dessus)
+et `ingestion/.env` rempli avec les vrais identifiants :
+
+```
+# Remplacer les CHANGE_ME (utilisateur + chemin absolu du repo) dans les
+# deux fichiers avant de les copier :
+sudo cp ingestion/deploy/malt-radar-ingest.service /etc/systemd/system/
+sudo cp ingestion/deploy/malt-radar-ingest.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now malt-radar-ingest.timer
+```
+
+Vérifier :
+
+```
+systemctl list-timers | grep malt-radar
+journalctl -u malt-radar-ingest.service -n 50
+```

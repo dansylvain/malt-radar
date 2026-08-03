@@ -1,0 +1,12 @@
+[Unit]
+Description=Malt-Radar daily ingestion (Free-Work + France Travail)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=CHANGE_ME
+WorkingDirectory=/CHANGE_ME/malt_radar/ingestion
+EnvironmentFile=/CHANGE_ME/malt_radar/ingestion/.env
+ExecStart=/CHANGE_ME/malt_radar/ingestion/.venv/bin/python -m malt_radar_ingestion.ingest free_work --max-pages 5
+ExecStart=/CHANGE_ME/malt_radar/ingestion/.venv/bin/python -m malt_radar_ingestion.ingest france_travail --max-pages 3

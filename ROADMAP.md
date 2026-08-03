@@ -40,15 +40,18 @@ contact, pas de contournement d'authentification, fréquence raisonnable
 - Obtenir une clé API France Travail.
 - **Sortie** : sources validées, aucun doute légal résiduel.
 
-## Phase 1 — Ingestion (VPS Hetzner, Python/Playwright)
-- Setup projet Python (uv ou poetry), Playwright headless.
-- Scraper Free-Work + Comet (rate-limited, retry/backoff sur erreurs réseau
-  et 429).
-- Client France Travail API.
-- Normalisation JSON brut → SQLite.
-- Timer systemd quotidien.
+## Phase 1 — Ingestion (VPS Hetzner) — code complet, déploiement restant
+- ✅ Scraper Free-Work (API JSON publique directe, pas de Playwright).
+- ✅ Client France Travail API (OAuth2, validé en conditions réelles).
+- ✅ Normalisation → `Mission` → SQLite (upsert idempotent, multi-source).
+- ✅ Unités systemd prêtes (`ingestion/deploy/`) : service + timer
+  quotidien, voir `ingestion/README.md` pour le déploiement.
+- ⬜ **Reste à faire par Dan** : cloner le repo sur la VPS, créer le venv,
+  remplir `ingestion/.env` avec les vrais identifiants, adapter les
+  `CHANGE_ME` des unités systemd et les activer (`systemctl enable --now`)
+  — je n'ai pas d'accès SSH à la VPS pour le faire moi-même.
 - **Sortie** : collecte stable pendant 1 semaine sans blocage IP ni erreur
-  non gérée.
+  non gérée — à confirmer une fois le timer actif sur la VPS.
 
 ## Phase 2 — Traitement (Raspberry Pi 5, Ollama/Qwen 2.5 3B)
 - Ollama + `qwen2.5:3b` sur le Pi.
