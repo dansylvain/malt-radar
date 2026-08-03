@@ -20,7 +20,10 @@
       "Bash(python3 -m json.tool)",
       "Bash(curl -sI -A \"MaltRadarBot/0.1 \\(personal market-research project; contact: dansylvain84@gmail.com\\)\" \"https://www.comet.co\" -w \"HTTP %{http_code}\\\\n\")",
       "Bash(curl -s -A \"MaltRadarBot/0.1 \\(personal market-research project; contact: dansylvain84@gmail.com\\)\" \"https://www.comet.co\" -o /tmp/claude-1000/-home-dsylvain-projects-malt-radar/3b6499a6-8852-4efb-b902-60f768cabd4d/scratchpad/comet_home.html -w \"size %{size_download} bytes\\\\n\")",
-      "Bash(curl -s -A \"MaltRadarBot/0.1 \\(personal market-research project; contact: dansylvain84@gmail.com\\)\" \"https://www.comet.co/sitemap.xml\")"
+      "Bash(curl -s -A \"MaltRadarBot/0.1 \\(personal market-research project; contact: dansylvain84@gmail.com\\)\" \"https://www.comet.co/sitemap.xml\")",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(python3 *)",
+      "WebFetch(domain:francetravail.io)"
     ]
   }
 }

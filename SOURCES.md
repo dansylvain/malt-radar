@@ -74,5 +74,36 @@ tout code d'ingestion — voir la contrainte associée dans `CLAUDE.md`.
 
 - **Statut** : API publique officielle (api.francetravail.io), gratuite,
   RGPD-compliant. Aucune ambiguïté légale.
-- **Décision** : client API, clé à obtenir via inscription développeur.
-- **Volume/fréquence** : selon quotas documentés par France Travail.
+- **Décision** : implémenté et **validé en conditions réelles** (2026-08-03)
+  (`ingestion/src/malt_radar_ingestion/sources/france_travail.py`). OAuth2
+  client_credentials, endpoint "Offres d'emploi v2". Nécessite un
+  `client_id`/`client_secret` personnels (inscription sur francetravail.io,
+  application abonnée à l'API "Offres d'emploi v2", voir
+  `ingestion/README.md`). Smoke-test réel réussi : token obtenu, offres
+  récupérées et mappées correctement, ingestion en SQLite confirmée.
+- **Nuance** : contrairement à Free-Work, le salaire renvoyé est un texte
+  libre (souvent annuel), pas un TJM journalier. Conservé tel quel dans
+  `Mission.raw_salary_text` pour extraction ultérieure (Phase 2, LLM), au
+  lieu d'être forcé dans `min/max_daily_salary`.
+- **Volume/fréquence** : limite documentée à 3 req/s ; respectée avec un
+  délai de 1s entre pages.
+- **Licence "offre d'emploi"** (lue le 2026-08-03, CGU francetravail.io
+  §5.2.b + licence associée, distincte de la licence Etalab) : usage
+  interne/personnel autorisé, mais **interdiction de mettre la base à
+  disposition de tiers ou de la sous-licencier**, et obligation de prendre
+  les mesures nécessaires pour empêcher l'extraction/exploitation du
+  contenu par d'autres utilisateurs. Implications concrètes pour
+  Malt-Radar :
+  - Ne jamais committer `data/malt_radar.db` ni aucun export brut des
+    annonces dans un repo public (déjà couvert par `.gitignore`).
+  - Ne jamais exposer publiquement une API/endpoint qui redonne accès aux
+    fiches individuelles.
+  - Pour toute démo publique du TUI (portfolio, captures, vidéo) :
+    privilégier les métriques agrégées (TJM moyen, % de tendance) plutôt
+    que la reproduction d'annonces individuelles avec nom d'entreprise/TJM
+    verbatim.
+  - CGU référencent aussi les art. L. 5321-1 s. et L. 5331-1 s. du code du
+    travail (activité de placement / diffusion des offres) — non
+    pertinents pour un usage personnel non-commercial sans republication,
+    mais à revérifier si le projet change de nature (usage public,
+    multi-utilisateurs).

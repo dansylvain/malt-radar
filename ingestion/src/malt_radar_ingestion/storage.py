@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS missions (
     location_label TEXT,
     company_name TEXT,
     published_at TEXT,
+    raw_salary_text TEXT,
     scraped_at TEXT NOT NULL,
     UNIQUE(source, external_id)
 );
@@ -47,8 +48,8 @@ INSERT INTO missions (
     source, external_id, slug, url, title, job_name, skills,
     min_daily_salary, max_daily_salary, currency, remote_mode,
     contracts, duration_value, duration_period, location_label,
-    company_name, published_at, scraped_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    company_name, published_at, raw_salary_text, scraped_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(source, external_id) DO UPDATE SET
     slug=excluded.slug,
     url=excluded.url,
@@ -65,6 +66,7 @@ ON CONFLICT(source, external_id) DO UPDATE SET
     location_label=excluded.location_label,
     company_name=excluded.company_name,
     published_at=excluded.published_at,
+    raw_salary_text=excluded.raw_salary_text,
     scraped_at=excluded.scraped_at
 """
 
@@ -105,6 +107,7 @@ def upsert_missions(conn: sqlite3.Connection, missions: Iterable[Mission]) -> in
                 mission.location_label,
                 mission.company_name,
                 mission.published_at,
+                mission.raw_salary_text,
                 scraped_at,
             ),
         )

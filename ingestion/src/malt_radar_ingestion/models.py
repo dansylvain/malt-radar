@@ -24,3 +24,4 @@ class Mission:
     location_label: str | None
     company_name: str | None
     published_at: str | None
+    raw_salary_text: str | None = None

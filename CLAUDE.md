@@ -37,8 +37,12 @@ d'ingestion).
   User-Agent identifiable avec contact, respect du `Crawl-delay` s'il
   existe (sinon ~1x/jour), pas de contournement d'authentification/CAPTCHA,
   retry/backoff sur erreurs réseau et 429 (jamais de martèlement).
-- **France Travail : API officielle**, aucune restriction particulière au-
-  delà des quotas documentés.
+- **France Travail : API officielle**, mais soumise à la "licence offre
+  d'emploi" : usage interne/personnel OK, **jamais de mise à disposition
+  de tiers des données brutes** (pas de commit de la DB dans un repo
+  public, pas d'API publique exposant les fiches individuelles). En démo
+  publique (portfolio), préférer les métriques agrégées aux annonces
+  individuelles verbatim. Détail dans `SOURCES.md`.
 
 Toute nouvelle source doit être validée (robots.txt + CGU) et ajoutée à
 `SOURCES.md` avant intégration au code.

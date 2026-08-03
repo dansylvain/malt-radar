@@ -75,6 +75,10 @@ contact, pas de contournement d'authentification, fréquence raisonnable
 - Client HTTP async (reqwest/tokio) vers l'API VPS/Pi.
 - Navigation clavier : filtre stack, refresh, export markdown, system
   health.
+- ⚠️ **Rappel licence France Travail** (voir `SOURCES.md`) : le panneau
+  "Live Feed" ne doit pas exposer publiquement des annonces individuelles
+  issues de France Travail à des tiers — usage personnel uniquement, pas
+  d'API publique par-dessus.
 - **Sortie** : TUI fonctionnel en lecture contre les données réelles du
   cluster.
 
@@ -88,3 +92,8 @@ contact, pas de contournement d'authentification, fréquence raisonnable
 - README avec démo (asciinema/gif du TUI).
 - Schéma d'architecture + choix techniques documentés.
 - Tests, CI basique, nettoyage.
+- ⚠️ **Rappel licence France Travail** (voir `SOURCES.md`) : pour toute
+  démo publique (gif, vidéo, captures), montrer des métriques agrégées
+  (TJM moyen, % de tendance), pas d'annonces individuelles verbatim avec
+  nom d'entreprise/TJM réel. Vérifier aussi qu'aucun export de données
+  brutes ne finit dans le repo public.

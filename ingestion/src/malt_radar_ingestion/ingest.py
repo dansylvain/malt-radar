@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import argparse
 
-from malt_radar_ingestion.sources import free_work
+from malt_radar_ingestion.sources import france_travail, free_work
 from malt_radar_ingestion.storage import init_db, upsert_missions
 
 SOURCES = {
-    "free_work": free_work.fetch_missions,
+    "free_work": lambda max_pages: free_work.fetch_missions(max_pages=max_pages),
+    "france_travail": lambda max_pages: france_travail.fetch_missions(max_results=max_pages * 50),
 }
 
 
