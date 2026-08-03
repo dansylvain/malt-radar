@@ -8,16 +8,23 @@ explicitement le scraping "manuel ou automatisé" (LinkedIn §8.2 : "any
 other technology or manual work" ; Malt art. 10.2 : "de manière
 automatisée ou non... ou tout autre dispositif"). Le clipper semi-manuel
 envisagé pour Malt a été écarté après lecture du texte exact — voir
-`SOURCES.md`. Sources retenues :
+`SOURCES.md`.
 
-- **Free-Work** (job board freelance tech) — scraping automatisé poli
-  (User-Agent identifié, rate-limit).
-- **Comet** — scraping automatisé poli, `robots.txt` ouvert.
+**Comet également écarté** (2026-08-03) : ce n'est pas un job board public,
+c'est un site vitrine pour un cabinet de placement — aucune fiche de
+mission publique à scraper, tout est derrière l'app authentifiée. Sources
+retenues :
+
+- **Free-Work** (job board freelance tech) — implémenté, API JSON publique
+  directe (voir `SOURCES.md`).
 - **France Travail API** (api.francetravail.io) — API officielle, publique,
-  gratuite.
+  gratuite. Pas encore implémentée.
 
 Le projet garde le nom "Malt-Radar" (branding/portfolio) mais ne source
-plus aucune donnée depuis Malt lui-même.
+plus aucune donnée depuis Malt lui-même. Avec Malt, LinkedIn et Comet tous
+écartés, le pipeline repose sur seulement 2 sources pour l'instant — à
+garder en tête si le volume de données s'avère trop faible en Phase 3
+(synthèse des tendances).
 
 Politique de scraping automatisé (Free-Work/Comet, voir `CLAUDE.md`) :
 respecter `robots.txt` et `Crawl-delay`, User-Agent identifiable avec

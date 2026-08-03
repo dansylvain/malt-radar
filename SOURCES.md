@@ -56,12 +56,19 @@ tout code d'ingestion — voir la contrainte associée dans `CLAUDE.md`.
 
 ## Comet
 
-- **robots.txt** (comet.co) : entièrement ouvert (`Disallow:` vide).
-- **CGU** : texte exact non confirmé (plusieurs entités "Comet" existent
-  sous ce nom — à vérifier qu'on cible bien la plateforme freelance
-  comet.co et pas une autre société).
-- **Décision** : scraping automatisé Playwright, mêmes règles de politesse
-  que Free-Work.
+- **robots.txt** (comet.co) : entièrement ouvert (`Disallow:` vide), mais
+  ça ne veut rien dire ici — voir plus bas.
+- **Investigation (2026-08-03)** : comet.co est un site vitrine Webflow
+  pour un cabinet de placement freelance (blog, pages sectorielles/
+  expertises, formulaires de contact). Le `sitemap.xml` liste 218 URLs,
+  aucune n'est une fiche de mission individuelle. Les missions réelles ne
+  sont visibles que dans leur app authentifiée
+  (`app.comet.co/freelancer/dashboard`, login requis).
+- **Décision : exclu du projet.** Pas un problème de CGU cette fois — il
+  n'y a simplement aucun catalogue public de missions à collecter. Aller
+  chercher les données dans l'app authentifiée violerait notre propre règle
+  de ne jamais contourner l'authentification (et on n'a pas de compte
+  freelance Comet de toute façon).
 
 ## France Travail (API officielle)
 

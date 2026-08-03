@@ -29,7 +29,11 @@ d'ingestion).
   clause couvre le manuel aussi bien que l'automatisé. **Aucun code, aucune
   extension navigateur, aucun outil, même à déclenchement manuel, ne doit
   cibler malt.fr, malt.com ou linkedin.com pour en extraire des données.**
-- **Free-Work et Comet : scraping automatisé autorisé**, avec politesse :
+- **Comet : exclu, pas de CGU en cause.** Site vitrine (Webflow) pour un
+  cabinet de placement — aucun catalogue public de missions. Les données
+  ne sont visibles que dans l'app authentifiée (`app.comet.co`), donc y
+  toucher violerait la règle "pas de contournement d'authentification".
+- **Free-Work : scraping automatisé autorisé**, avec politesse :
   User-Agent identifiable avec contact, respect du `Crawl-delay` s'il
   existe (sinon ~1x/jour), pas de contournement d'authentification/CAPTCHA,
   retry/backoff sur erreurs réseau et 429 (jamais de martèlement).
