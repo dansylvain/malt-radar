@@ -15,6 +15,7 @@ import httpx
 from pydantic import ValidationError
 
 from malt_radar_worker.schema import Extraction
+from malt_radar_worker.skills import normalize_stack
 
 OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
@@ -113,7 +114,9 @@ def extract(mission: dict, client: httpx.Client | None = None) -> Extraction:
                 response.raise_for_status()
                 raw_output = response.json()["response"]
                 data = json.loads(raw_output)
-                return Extraction.model_validate(data)
+                extraction = Extraction.model_validate(data)
+                extraction.stack = normalize_stack(extraction.stack)
+                return extraction
             except (httpx.HTTPError, json.JSONDecodeError, ValidationError) as exc:
                 last_error = exc
                 continue

@@ -122,6 +122,19 @@ def test_extract_retries_on_read_timeout_then_succeeds():
     assert extraction.categorie == "RAG"
 
 
+def test_extract_normalizes_stack():
+    dirty_json = json.dumps({**json.loads(VALID_JSON), "stack": ["python", "RAG Systems", "Python"]})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _ollama_response(dirty_json)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    extraction = extract(MISSION, client=client)
+
+    assert extraction.stack == ["python", "RAG"]
+
+
 def test_extract_raises_extraction_failed_after_repeated_timeouts():
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("timed out", request=request)
