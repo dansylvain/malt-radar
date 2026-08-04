@@ -349,6 +349,7 @@ impl App {
             self.alias_edit = Some(state);
             return;
         }
+        let source_panel = self.audit_panel;
 
         let target_key = state.target.to_lowercase();
         let mut keys = alias_keys_targeting(&state.target, &self.aliases);
@@ -363,12 +364,23 @@ impl App {
         }
         self.recompute();
         self.mode = Mode::SkillAudit;
-        // Follow the merge result into the Consolidated column — without
-        // this the selection would stay wherever it was in Orphans, which
-        // is exactly the "can't find what I just merged" confusion this
-        // two-column split exists to avoid.
-        self.audit_panel = AuditPanel::Consolidated;
-        reselect(&mut self.consolidated_list_state, &self.audit_consolidated, Some(&new_canonical));
+
+        match source_panel {
+            // Merging from Orphans: stay there (recompute()'s generic
+            // reselect-by-name already fell back to a clamped index, so
+            // the cursor naturally lands on whatever slid into the merged
+            // skill's old spot) — jumping to Consolidated after *every*
+            // single merge would interrupt working through a list of
+            // duplicates one by one. Only follow across if there's
+            // nothing left to stay on.
+            AuditPanel::Orphans if !self.audit_orphans.is_empty() => {}
+            // Renaming an already-consolidated group, or the last orphan
+            // just got merged away: follow the result into Consolidated.
+            _ => {
+                self.audit_panel = AuditPanel::Consolidated;
+                reselect(&mut self.consolidated_list_state, &self.audit_consolidated, Some(&new_canonical));
+            }
+        }
     }
 
     /// The "undo": deletes every alias row pointing at the selected row's
