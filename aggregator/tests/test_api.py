@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -107,6 +109,55 @@ def test_submit_fiche_unknown_mission_returns_404(client):
     )
 
     assert response.status_code == 404
+
+
+def test_list_fiches_requires_token(client):
+    response = client.get("/fiches")
+
+    assert response.status_code == 401
+
+
+def test_list_fiches_returns_parsed_frontmatter_newest_first(client, tmp_path):
+    fiches_dir = tmp_path / "fiches"
+    fiches_dir.mkdir()
+    older = fiches_dir / "free_work_1.md"
+    older.write_text(
+        "---\ntitle: Consultant RAG\ntjm_min: 500\nstack:\n- Python\n- RAG\n---\n\n# Consultant RAG\n",
+        encoding="utf-8",
+    )
+    newer = fiches_dir / "free_work_2.md"
+    newer.write_text("---\ntitle: Consultant Vision\n---\n\n# Consultant Vision\n", encoding="utf-8")
+    os.utime(older, (1_700_000_000, 1_700_000_000))
+    os.utime(newer, (1_700_000_100, 1_700_000_100))
+
+    response = client.get("/fiches", headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [f["title"] for f in body] == ["Consultant Vision", "Consultant RAG"]
+    assert body[1]["stack"] == ["Python", "RAG"]
+    assert body[1]["filename"] == "free_work_1.md"
+
+
+def test_list_fiches_skips_malformed_files(client, tmp_path):
+    fiches_dir = tmp_path / "fiches"
+    fiches_dir.mkdir()
+    (fiches_dir / "broken.md").write_text("not a fiche at all", encoding="utf-8")
+    (fiches_dir / "good.md").write_text("---\ntitle: OK\n---\n\n# OK\n", encoding="utf-8")
+
+    response = client.get("/fiches", headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["title"] == "OK"
+
+
+def test_list_fiches_empty_when_dir_missing(client):
+    response = client.get("/fiches", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json() == []
 
 
 def test_missing_server_token_config_returns_503(conn, tmp_path, monkeypatch):

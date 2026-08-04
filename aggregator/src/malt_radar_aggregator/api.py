@@ -1,12 +1,17 @@
-"""Aggregator HTTP API: the VPS side of the worker's pull/push flow.
+"""Aggregator HTTP API: the VPS side of the worker's pull/push flow, plus
+the read side consumed by the Phase 4 TUI.
 
 - GET  /missions/unprocessed — the Pi5 worker pulls raw missions it hasn't
   extracted entities from yet.
 - POST /fiches               — the worker pushes back the generated
   Markdown fiche once extraction succeeds; the mission is then flagged
   processed so it isn't served again.
+- GET  /fiches               — the TUI (poste de travail) reads back the
+  fiches already generated, as parsed frontmatter. Minimal stand-in until
+  Phase 3's weekly aggregation/digest lands — no metrics here, just the
+  raw fiche fields.
 
-See ROADMAP.md (Phase 2) and CLAUDE.md's network section — this API is
+See ROADMAP.md (Phase 2/4) and CLAUDE.md's network section — this API is
 reached only over Tailscale, never a public port (see server.py).
 """
 
@@ -17,6 +22,7 @@ import re
 import sqlite3
 from pathlib import Path
 
+import yaml
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -25,6 +31,7 @@ from malt_radar_ingestion.storage import DEFAULT_DB_PATH, fetch_unprocessed, get
 
 FICHES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "fiches"
 _SAFE_CHARS = re.compile(r"[^a-zA-Z0-9_-]+")
+_FRONTMATTER_RE = re.compile(r"\A---\n(.*?\n)---\n", re.DOTALL)
 
 app = FastAPI(title="malt-radar-aggregator")
 
@@ -81,3 +88,33 @@ def submit_fiche(
 
     mark_processed(conn, payload.mission_id)
     return {"mission_id": payload.mission_id, "filename": filename}
+
+
+def _read_fiche(path: Path) -> dict | None:
+    """Parse a fiche's YAML frontmatter. Returns None if the file doesn't
+    start with a well-formed `---`-delimited block (skipped rather than
+    failing the whole listing — one bad file shouldn't blank the TUI)."""
+    match = _FRONTMATTER_RE.match(path.read_text(encoding="utf-8"))
+    if match is None:
+        return None
+    frontmatter = yaml.safe_load(match.group(1))
+    if not isinstance(frontmatter, dict):
+        return None
+    frontmatter["filename"] = path.name
+    return frontmatter
+
+
+@app.get("/fiches")
+def list_fiches(
+    limit: int = 100,
+    _token: None = Depends(require_token),
+) -> list[dict]:
+    if not FICHES_DIR.exists():
+        return []
+    paths = sorted(FICHES_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
+    fiches = []
+    for path in paths[:limit]:
+        fiche = _read_fiche(path)
+        if fiche is not None:
+            fiches.append(fiche)
+    return fiches

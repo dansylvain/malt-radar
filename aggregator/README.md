@@ -16,10 +16,18 @@ lisent/écrivent la même `malt_radar.db`.
 - `POST /fiches` — `{"mission_id": int, "markdown": str}` : écrit la fiche
   sur disque (`data/fiches/<source>_<external_id>.md`) et marque la
   mission comme traitée.
+- `GET /fiches?limit=100` — liste les fiches déjà générées (les plus
+  récentes d'abord), sous forme de frontmatter YAML parsé + `filename`.
+  Lu par le TUI (Phase 4, poste de travail). Volontairement minimal : pas
+  de métriques agrégées ni de digest — ça reste le rôle de la Phase 3, pas
+  encore construite. Un fichier dont le frontmatter est absent/invalide
+  est silencieusement ignoré plutôt que de faire échouer tout l'appel.
 
-Les deux exigent `Authorization: Bearer <AGGREGATOR_API_TOKEN>`. Défense
+Les trois exigent `Authorization: Bearer <AGGREGATOR_API_TOKEN>`. Défense
 en profondeur uniquement : cette API n'est de toute façon jamais exposée
-que sur le réseau Tailscale (voir `server.py` et `../CLAUDE.md`).
+que sur le réseau Tailscale (voir `server.py` et `../CLAUDE.md`) — le TUI
+devra donc, comme le worker, connaître ce secret partagé pour lire les
+fiches.
 
 ## Setup
 

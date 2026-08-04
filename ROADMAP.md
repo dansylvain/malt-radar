@@ -104,6 +104,12 @@ Décisions d'architecture (2026-08-03) :
 - Exposition des résultats via une API locale consommée par le TUI.
 
 ## Phase 4 — Dashboard TUI (Rust/Ratatui, poste de travail/WSL2)
+- ✅ **Amendement (2026-08-04)** : `GET /fiches` ajouté à `aggregator/`
+  (frontmatter YAML parsé + `filename`, plus récentes d'abord) pour que le
+  TUI ait de vraies données sans attendre la Phase 3 — volontairement pas
+  de métriques agrégées ni de digest, ça reste le rôle de la Phase 3.
+  Toujours protégé par `AGGREGATOR_API_TOKEN` (le TUI devra donc connaître
+  ce secret, comme le worker).
 - Workspace Cargo (`core`, `tui`, `client`).
 - Layout Ratatui : Market Metrics, Live Feed, Skills Frequency, Digest,
   footer de commandes.
