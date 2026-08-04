@@ -69,10 +69,14 @@ def build_prompt(mission: dict) -> str:
         "connus comme indices mais corrige-les si la description les contredit. "
         "N'ajoute à stack QUE des technologies explicitement nommées dans "
         "\"Compétences déjà listées\" ou dans \"Description\" — jamais les exemples "
-        "entre parenthèses de la catégorie de métier, et jamais un fragment recopié "
-        "tel quel du titre qui ne nomme pas une technologie précise. Si aucune "
-        "technologie précise n'apparaît dans ces deux champs, renvoie stack: [] "
-        "plutôt que d'en inventer une. "
+        "entre parenthèses de la catégorie de métier. Un nom de technologie qui "
+        "apparaît dans le Titre reste valide s'il est aussi confirmé par la "
+        "Description (ex: titre \"Consultant ServiceNow\" + description qui parle "
+        "de ServiceNow → inclure \"ServiceNow\" dans stack) ; seul un fragment de "
+        "titre qui ne nomme aucune technologie précise (ex: un intitulé de poste) "
+        "doit être ignoré. Si aucune technologie précise n'apparaît dans "
+        "\"Compétences déjà listées\" ou \"Description\", renvoie stack: [] plutôt "
+        "que d'en inventer une. "
         "La catégorie doit refléter le sujet dominant de la mission — choisis "
         "\"Autre\" plutôt que de forcer une catégorie qui ne correspond pas.\n\n"
         f"{context}\n\n{_SCHEMA_HINT}"
@@ -92,7 +96,16 @@ def extract(mission: dict, client: httpx.Client | None = None) -> Extraction:
             try:
                 response = client.post(
                     f"{OLLAMA_HOST}/api/generate",
-                    json={"model": OLLAMA_MODEL, "prompt": prompt, "format": "json", "stream": False},
+                    json={
+                        "model": OLLAMA_MODEL,
+                        "prompt": prompt,
+                        "format": "json",
+                        "stream": False,
+                        # Deterministic extraction, not creative generation —
+                        # Ollama's default (~0.8) was sampling a different
+                        # categorie/stack on every call for the same input.
+                        "options": {"temperature": 0},
+                    },
                 )
                 response.raise_for_status()
                 raw_output = response.json()["response"]
