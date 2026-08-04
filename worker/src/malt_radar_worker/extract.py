@@ -97,7 +97,12 @@ def extract(mission: dict, client: httpx.Client | None = None) -> Extraction:
                     json={
                         "model": OLLAMA_MODEL,
                         "prompt": prompt,
-                        "format": "json",
+                        # A full JSON Schema here (Ollama >=0.5) constrains
+                        # decoding token-by-token — categorie/niveau literally
+                        # can't leave their enum, unlike plain "format": "json"
+                        # which only guarantees syntactically valid JSON and
+                        # let the model put e.g. a job title in categorie.
+                        "format": Extraction.model_json_schema(),
                         "stream": False,
                         # Deterministic extraction, not creative generation —
                         # Ollama's default (~0.8) was sampling a different
