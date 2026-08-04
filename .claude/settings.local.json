@@ -53,7 +53,10 @@
       "Bash(tmux new-session *)",
       "Bash(tmux capture-pane *)",
       "Bash(tmux send-keys *)",
-      "Bash(tmux has-session *)"
+      "Bash(tmux has-session *)",
+      "Bash(make test-tui *)",
+      "Bash(cargo fmt *)",
+      "Bash(git stash *)"
     ]
   }
 }

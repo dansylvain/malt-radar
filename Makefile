@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help setup-ingestion setup-aggregator setup-worker \
-        test test-ingestion test-aggregator test-worker \
+        test test-ingestion test-aggregator test-worker test-tui \
         ingest-free-work ingest-france-travail \
         run-aggregator run-worker clean
 
@@ -8,7 +8,7 @@ help:
 	@echo "make setup-ingestion        - create ingestion venv, install deps"
 	@echo "make setup-aggregator       - create aggregator venv (+ editable ingestion dep), install deps"
 	@echo "make setup-worker           - create worker venv, install deps"
-	@echo "make test                   - run all test suites"
+	@echo "make test                   - run all test suites (Python + Rust)"
 	@echo "make ingest-free-work       - run a Free-Work ingestion pass (--max-pages 3)"
 	@echo "make ingest-france-travail  - run a France Travail pass (needs ingestion/.env)"
 	@echo "make run-aggregator         - start the aggregator HTTP API (needs aggregator/.env)"
@@ -24,7 +24,10 @@ setup-aggregator:
 setup-worker:
 	cd worker && python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 
-test: test-ingestion test-aggregator test-worker
+test: test-ingestion test-aggregator test-worker test-tui
+
+test-tui:
+	cd tui && cargo test
 
 test-ingestion:
 	cd ingestion && .venv/bin/pytest -q

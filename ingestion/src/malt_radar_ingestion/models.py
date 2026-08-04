@@ -10,7 +10,7 @@ class Mission:
     source: str
     external_id: int | str
     slug: str | None
-    url: str
+    url: str | None
     title: str
     job_name: str
     description: str | None
@@ -26,3 +26,4 @@ class Mission:
     company_name: str | None
     published_at: str | None
     raw_salary_text: str | None = None
+    job_slug: str | None = None

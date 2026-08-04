@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS missions (
     external_id TEXT NOT NULL,
     slug TEXT,
     url TEXT,
+    job_slug TEXT,
     title TEXT NOT NULL,
     job_name TEXT,
     description TEXT,
@@ -54,18 +55,20 @@ _MIGRATION_COLUMNS = {
     "description": "TEXT",
     "processed": "INTEGER NOT NULL DEFAULT 0",
     "processed_at": "TEXT",
+    "job_slug": "TEXT",
 }
 
 _UPSERT_SQL = """
 INSERT INTO missions (
-    source, external_id, slug, url, title, job_name, description, skills,
+    source, external_id, slug, url, job_slug, title, job_name, description, skills,
     min_daily_salary, max_daily_salary, currency, remote_mode,
     contracts, duration_value, duration_period, location_label,
     company_name, published_at, raw_salary_text, scraped_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(source, external_id) DO UPDATE SET
     slug=excluded.slug,
     url=excluded.url,
+    job_slug=excluded.job_slug,
     title=excluded.title,
     job_name=excluded.job_name,
     description=excluded.description,
@@ -122,6 +125,7 @@ def upsert_missions(conn: sqlite3.Connection, missions: Iterable[Mission]) -> in
                 str(mission.external_id),
                 mission.slug,
                 mission.url,
+                mission.job_slug,
                 mission.title,
                 mission.job_name,
                 mission.description,

@@ -38,11 +38,18 @@ def _get_with_retry(client: httpx.Client, url: str) -> httpx.Response:
 def _to_mission(raw: dict[str, Any]) -> Mission:
     location = raw.get("location") or {}
     company = raw.get("company") or {}
+    job_slug = (raw.get("job") or {}).get("slug")
+    # The `/fr/tech-it/jobs/{slug}` form redirects to the site's homepage —
+    # verified against the live site. The canonical, non-redirecting URL
+    # needs the job category slug too, so without it there's no reliable
+    # link to construct (no fallback to the known-dead form).
+    url = f"https://www.free-work.com/fr/tech-it/job-mission/{job_slug}/{raw['slug']}" if job_slug else None
     return Mission(
         source="free_work",
         external_id=raw["id"],
         slug=raw["slug"],
-        url=f"https://www.free-work.com/fr/tech-it/jobs/{raw['slug']}",
+        url=url,
+        job_slug=job_slug,
         title=raw["title"],
         job_name=(raw.get("job") or {}).get("name", ""),
         description=raw.get("description"),

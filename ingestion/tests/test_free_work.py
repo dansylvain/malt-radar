@@ -4,7 +4,7 @@ RAW_SAMPLE = {
     "id": 659126,
     "slug": "consultant-pmo-support-gestion-de-projet",
     "title": "Consultant PMO / Support Gestion de Projet",
-    "job": {"name": "Assistant·e chef·fe de projet"},
+    "job": {"name": "Assistant·e chef·fe de projet", "slug": "assistant-chef-de-projet"},
     "description": "<p>Mission de pilotage PMO pour un client grand compte.</p>",
     "skills": [{"name": "Pilotage"}],
     "minDailySalary": 400,
@@ -25,7 +25,11 @@ def test_to_mission_maps_fields():
 
     assert mission.source == "free_work"
     assert mission.external_id == 659126
-    assert mission.url == "https://www.free-work.com/fr/tech-it/jobs/consultant-pmo-support-gestion-de-projet"
+    assert mission.job_slug == "assistant-chef-de-projet"
+    assert (
+        mission.url
+        == "https://www.free-work.com/fr/tech-it/job-mission/assistant-chef-de-projet/consultant-pmo-support-gestion-de-projet"
+    )
     assert mission.description == "<p>Mission de pilotage PMO pour un client grand compte.</p>"
     assert mission.skills == ["Pilotage"]
     assert mission.min_daily_salary == 400
@@ -43,3 +47,12 @@ def test_to_mission_handles_missing_optional_fields():
     assert mission.location_label is None
     assert mission.company_name is None
     assert mission.skills == []
+
+
+def test_to_mission_leaves_url_none_without_job_slug():
+    raw = {**RAW_SAMPLE, "job": {"name": "Assistant·e chef·fe de projet"}}
+
+    mission = _to_mission(raw)
+
+    assert mission.job_slug is None
+    assert mission.url is None

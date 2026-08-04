@@ -9,7 +9,8 @@ def make_mission(**overrides) -> Mission:
         source="free_work",
         external_id=1,
         slug="a-mission",
-        url="https://www.free-work.com/fr/tech-it/jobs/a-mission",
+        url="https://www.free-work.com/fr/tech-it/job-mission/data-engineer/a-mission",
+        job_slug="data-engineer",
         title="Consultant RAG",
         job_name="Data Engineer",
         description="Mission de conseil RAG pour un client grand compte.",
@@ -51,6 +52,17 @@ def test_upsert_is_idempotent_on_source_and_external_id():
     rows = conn.execute("SELECT title FROM missions").fetchall()
     assert len(rows) == 1
     assert rows[0][0] == "New title"
+
+
+def test_job_slug_and_url_are_persisted_and_updated_on_conflict():
+    conn = init_db(":memory:")
+    upsert_missions(conn, [make_mission(job_slug=None, url=None)])
+
+    upsert_missions(conn, [make_mission(job_slug="data-engineer", url="https://www.free-work.com/fr/tech-it/job-mission/data-engineer/a-mission")])
+
+    row = conn.execute("SELECT job_slug, url FROM missions").fetchone()
+    assert row[0] == "data-engineer"
+    assert row[1] == "https://www.free-work.com/fr/tech-it/job-mission/data-engineer/a-mission"
 
 
 def test_different_sources_with_same_external_id_are_distinct():
