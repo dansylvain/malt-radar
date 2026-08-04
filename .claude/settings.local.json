@@ -47,7 +47,13 @@
       "Read(//tmp/**)",
       "Bash(pkill -9 -f malt-radar-tui)",
       "Bash(pkill -9 -f \"target/debug\")",
-      "Bash(cargo clippy *)"
+      "Bash(cargo clippy *)",
+      "Bash(xargs -I{} echo {})",
+      "Bash(tmux kill-session *)",
+      "Bash(tmux new-session *)",
+      "Bash(tmux capture-pane *)",
+      "Bash(tmux send-keys *)",
+      "Bash(tmux has-session *)"
     ]
   }
 }

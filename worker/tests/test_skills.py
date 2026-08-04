@@ -1,15 +1,10 @@
 from malt_radar_worker.skills import normalize_skill, normalize_stack
 
 
-def test_normalize_skill_folds_case_and_trailing_punctuation():
-    assert normalize_skill("rag.") == "RAG"
-    assert normalize_skill("Rag") == "RAG"
+def test_normalize_skill_strips_trailing_punctuation_but_preserves_casing():
+    assert normalize_skill("rag.") == "rag"
+    assert normalize_skill("Rag") == "Rag"
     assert normalize_skill("RAG") == "RAG"
-
-
-def test_normalize_skill_folds_known_synonym():
-    assert normalize_skill("RAG Systems") == "RAG"
-    assert normalize_skill("rag systems") == "RAG"
 
 
 def test_normalize_skill_collapses_internal_whitespace():
@@ -23,7 +18,10 @@ def test_normalize_skill_passes_through_unknown_skill_cleaned():
 def test_normalize_stack_dedupes_after_normalization_preserving_order():
     stack = ["Python", "rag", "FastAPI", "RAG.", "Rag Systems"]
 
-    assert normalize_stack(stack) == ["Python", "RAG", "FastAPI"]
+    # "RAG." cleans to "RAG", a case-duplicate of "rag" (already seen) so
+    # it's dropped; "Rag Systems" is a genuinely distinct key, kept as-is
+    # (no more semantic synonym folding here — see skills.py's docstring).
+    assert normalize_stack(stack) == ["Python", "rag", "FastAPI", "Rag Systems"]
 
 
 def test_normalize_stack_drops_empty_entries():

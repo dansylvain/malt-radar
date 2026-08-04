@@ -1,7 +1,7 @@
 //! Domain types and pure computations shared between the HTTP client and
 //! the TUI rendering layer. No I/O here — keeps both testable in isolation.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 
@@ -57,6 +57,82 @@ impl Fiche {
             (None, None) => None,
         }
     }
+}
+
+/// A persisted skill-alias mapping, as returned by the aggregator's
+/// `GET /skill-aliases` — `alias_key` (lowercased/cleaned raw skill
+/// string) -> `canonical` (the display form it should resolve to).
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct SkillAlias {
+    pub alias_key: String,
+    pub canonical: String,
+}
+
+/// Strips whitespace/punctuation noise, preserving casing — mirrors the
+/// worker's `_clean` (`worker/src/malt_radar_worker/skills.py`). Casing
+/// isn't folded here: that's what the alias-map lookup in `resolve_skill`
+/// is for.
+fn clean_skill(raw: &str) -> String {
+    raw.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim_end_matches(['.', ',', ';', ':', '!', '?'])
+        .to_string()
+}
+
+/// Resolves one raw skill string to its display form: clean it, then look
+/// up the cleaned/lowercased form in `aliases`, falling back to the
+/// cleaned (case-preserved) string if there's no alias for it.
+///
+/// Single lookup, no chain-following: renaming an already-merged group is
+/// handled by updating every alias row that pointed at the old name
+/// (cascade-on-write, see `alias_keys_targeting` and the TUI's alias-edit
+/// overlay), not by following alias chains here — keeps this function,
+/// called on every render/refresh, trivially simple and cycle-free.
+pub fn resolve_skill(raw: &str, aliases: &HashMap<String, String>) -> String {
+    let cleaned = clean_skill(raw);
+    aliases.get(&cleaned.to_lowercase()).cloned().unwrap_or(cleaned)
+}
+
+/// Applies `resolve_skill` to every fiche's `stack`, never mutating the
+/// input — fiches are never rewritten, resolution happens fresh at
+/// display time from whatever the alias table currently says. Re-dedupes
+/// each fiche's own stack case-insensitively after resolution: two raw
+/// entries on the same mission (e.g. "Power BI" and "PowerBI") can
+/// collapse onto the same canonical string and must not double-count.
+pub fn resolve_fiche_skills(fiches: &[Fiche], aliases: &HashMap<String, String>) -> Vec<Fiche> {
+    fiches
+        .iter()
+        .map(|fiche| {
+            let mut seen: HashSet<String> = HashSet::new();
+            let mut stack = Vec::new();
+            for raw in &fiche.stack {
+                let skill = resolve_skill(raw, aliases);
+                if skill.is_empty() {
+                    continue;
+                }
+                if seen.insert(skill.to_lowercase()) {
+                    stack.push(skill);
+                }
+            }
+            Fiche {
+                stack,
+                ..fiche.clone()
+            }
+        })
+        .collect()
+}
+
+/// Every existing `alias_key` in `aliases` whose value equals `canonical`
+/// exactly. Shared by the TUI's rename-cascade (which rows need their
+/// canonical updated when a merged group is renamed) and its `d`-key
+/// defuse (which rows to delete to undo a merge).
+pub fn alias_keys_targeting(canonical: &str, aliases: &HashMap<String, String>) -> Vec<String> {
+    aliases
+        .iter()
+        .filter(|(_, v)| v.as_str() == canonical)
+        .map(|(k, _)| k.clone())
+        .collect()
 }
 
 /// Synthetic bucket name for every skill beyond `compute_metrics`'s `top_n`,
@@ -118,6 +194,16 @@ pub struct MarketMetrics {
     pub top_skills: Vec<SkillStat>,
 }
 
+fn count_skill_mentions(fiches: &[Fiche]) -> HashMap<&str, usize> {
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for fiche in fiches {
+        for skill in &fiche.stack {
+            *counts.entry(skill.as_str()).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
 pub fn compute_metrics(fiches: &[Fiche], top_n: usize) -> MarketMetrics {
     let tjms: Vec<f64> = fiches.iter().filter_map(Fiche::tjm_mid).collect();
     let avg_tjm = if tjms.is_empty() {
@@ -126,12 +212,7 @@ pub fn compute_metrics(fiches: &[Fiche], top_n: usize) -> MarketMetrics {
         Some(tjms.iter().sum::<f64>() / tjms.len() as f64)
     };
 
-    let mut counts: HashMap<&str, usize> = HashMap::new();
-    for fiche in fiches {
-        for skill in &fiche.stack {
-            *counts.entry(skill.as_str()).or_insert(0) += 1;
-        }
-    }
+    let counts = count_skill_mentions(fiches);
     let total_mentions: usize = counts.values().sum();
     let percent_of = |count: usize| -> f64 {
         if total_mentions == 0 {
@@ -176,6 +257,32 @@ pub fn compute_metrics(fiches: &[Fiche], top_n: usize) -> MarketMetrics {
         avg_tjm,
         top_skills,
     }
+}
+
+/// One distinct skill name and how many fiches mention it, across the
+/// *entire* sample — unlike `MarketMetrics::top_skills`, not capped to a
+/// `top_n` and no synthetic [`OTHERS_LABEL`] bucket. Feeds the TUI's skill
+/// audit view, whose purpose is to surface raw name variants (e.g. "RAG"
+/// vs "RAG Systems") that should be added to the worker's normalization
+/// alias table (`worker/src/malt_radar_worker/skills.py::CANONICAL_ALIASES`)
+/// — a gap the top-5-only Top Skills panel can't reveal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkillCount {
+    pub name: String,
+    pub count: usize,
+}
+
+pub fn skill_audit(fiches: &[Fiche]) -> Vec<SkillCount> {
+    let counts = count_skill_mentions(fiches);
+    let mut result: Vec<SkillCount> = counts
+        .into_iter()
+        .map(|(name, count)| SkillCount {
+            name: name.to_string(),
+            count,
+        })
+        .collect();
+    result.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+    result
 }
 
 #[cfg(test)]
@@ -300,6 +407,108 @@ mod tests {
         let sum: i64 = metrics.top_skills.iter().map(|s| s.percent_rounded).sum();
         assert_eq!(sum, 100);
         assert_eq!(metrics.top_skills.last().unwrap().name, OTHERS_LABEL);
+    }
+
+    #[test]
+    fn skill_audit_lists_every_distinct_skill_uncapped() {
+        let fiches = vec![
+            fiche(&["Python", "RAG"], None, None),
+            fiche(&["Python"], None, None),
+            fiche(&["RAG Systems"], None, None),
+        ];
+
+        let audit = skill_audit(&fiches);
+
+        assert_eq!(
+            audit,
+            vec![
+                SkillCount { name: "Python".to_string(), count: 2 },
+                SkillCount { name: "RAG".to_string(), count: 1 },
+                SkillCount { name: "RAG Systems".to_string(), count: 1 },
+            ]
+        );
+    }
+
+    #[test]
+    fn skill_audit_breaks_count_ties_alphabetically() {
+        let fiches = vec![fiche(&["C", "A", "B"], None, None)];
+
+        let audit = skill_audit(&fiches);
+
+        assert_eq!(audit.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["A", "B", "C"]);
+    }
+
+    #[test]
+    fn skill_audit_handles_no_data() {
+        assert_eq!(skill_audit(&[]), Vec::new());
+    }
+
+    #[test]
+    fn resolve_skill_uses_alias_when_present_case_insensitively() {
+        let aliases = HashMap::from([("powerbi".to_string(), "Power BI".to_string())]);
+
+        assert_eq!(resolve_skill("PowerBI", &aliases), "Power BI");
+        assert_eq!(resolve_skill("powerbi", &aliases), "Power BI");
+        assert_eq!(resolve_skill("PowerBI.", &aliases), "Power BI");
+    }
+
+    #[test]
+    fn resolve_skill_falls_back_to_cleaned_raw_when_unmapped() {
+        let aliases = HashMap::new();
+
+        assert_eq!(resolve_skill("  LangChain  ", &aliases), "LangChain");
+        assert_eq!(resolve_skill("Rag.", &aliases), "Rag");
+    }
+
+    #[test]
+    fn resolve_fiche_skills_never_mutates_input_and_resolves_fresh() {
+        let fiches = vec![fiche(&["powerbi"], None, None)];
+        let aliases = HashMap::from([("powerbi".to_string(), "Power BI".to_string())]);
+
+        let resolved = resolve_fiche_skills(&fiches, &aliases);
+
+        assert_eq!(fiches[0].stack, vec!["powerbi".to_string()]);
+        assert_eq!(resolved[0].stack, vec!["Power BI".to_string()]);
+    }
+
+    #[test]
+    fn resolve_fiche_skills_dedupes_within_a_fiche_after_resolution() {
+        let fiches = vec![fiche(&["PowerBI", "Power BI"], None, None)];
+        let aliases = HashMap::from([("powerbi".to_string(), "Power BI".to_string())]);
+
+        let resolved = resolve_fiche_skills(&fiches, &aliases);
+
+        assert_eq!(resolved[0].stack, vec!["Power BI".to_string()]);
+    }
+
+    #[test]
+    fn resolve_fiche_skills_is_identity_with_empty_alias_map() {
+        let fiches = vec![fiche(&["Python", "RAG"], None, None)];
+
+        let resolved = resolve_fiche_skills(&fiches, &HashMap::new());
+
+        assert_eq!(resolved[0].stack, vec!["Python".to_string(), "RAG".to_string()]);
+    }
+
+    #[test]
+    fn alias_keys_targeting_finds_every_matching_key() {
+        let aliases = HashMap::from([
+            ("powerbi".to_string(), "Power BI".to_string()),
+            ("microsoft power bi".to_string(), "Power BI".to_string()),
+            ("rag".to_string(), "RAG".to_string()),
+        ]);
+
+        let mut keys = alias_keys_targeting("Power BI", &aliases);
+        keys.sort();
+
+        assert_eq!(keys, vec!["microsoft power bi".to_string(), "powerbi".to_string()]);
+    }
+
+    #[test]
+    fn alias_keys_targeting_returns_empty_when_no_match() {
+        let aliases = HashMap::from([("rag".to_string(), "RAG".to_string())]);
+
+        assert_eq!(alias_keys_targeting("Power BI", &aliases), Vec::<String>::new());
     }
 
     #[test]

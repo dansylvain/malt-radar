@@ -2,7 +2,7 @@
 //! (`aggregator/src/malt_radar_aggregator/api.py`). Reached only over
 //! Tailscale — see `CLAUDE.md`'s network section — never a public URL.
 
-use malt_radar_core::Fiche;
+use malt_radar_core::{Fiche, SkillAlias};
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -36,6 +36,10 @@ pub enum ClientError {
     Unauthorized,
 }
 
+// `Clone` is needed so `app`'s background tasks (fetch loop, alias-write
+// loop) can each hold their own handle — cheap: `reqwest::Client` is
+// `Arc`-backed internally, and `AggregatorConfig` already derives `Clone`.
+#[derive(Clone)]
 pub struct AggregatorClient {
     http: reqwest::Client,
     config: AggregatorConfig,
@@ -65,6 +69,55 @@ impl AggregatorClient {
         }
         let fiches = response.error_for_status()?.json::<Vec<Fiche>>().await?;
         Ok(fiches)
+    }
+
+    /// `GET /skill-aliases` — see `aggregator/README.md`.
+    pub async fn list_skill_aliases(&self) -> Result<Vec<SkillAlias>, ClientError> {
+        let url = format!("{}/skill-aliases", self.config.base_url.trim_end_matches('/'));
+        let response = self.http.get(url).bearer_auth(&self.config.api_token).send().await?;
+
+        if response.status().as_u16() == 401 {
+            return Err(ClientError::Unauthorized);
+        }
+        Ok(response.error_for_status()?.json::<Vec<SkillAlias>>().await?)
+    }
+
+    /// `PUT /skill-aliases`.
+    pub async fn upsert_skill_alias(&self, alias: &str, canonical: &str) -> Result<SkillAlias, ClientError> {
+        let url = format!("{}/skill-aliases", self.config.base_url.trim_end_matches('/'));
+        let response = self
+            .http
+            .put(url)
+            .bearer_auth(&self.config.api_token)
+            .json(&serde_json::json!({ "alias": alias, "canonical": canonical }))
+            .send()
+            .await?;
+
+        if response.status().as_u16() == 401 {
+            return Err(ClientError::Unauthorized);
+        }
+        Ok(response.error_for_status()?.json::<SkillAlias>().await?)
+    }
+
+    /// `DELETE /skill-aliases` — `alias` is sent as a query param, not a
+    /// path segment or body: skill strings can contain "/" (breaks path
+    /// routing), and `httpx`'s `.delete()` shorthand (used server-side by
+    /// the aggregator's tests) has no body support at all.
+    pub async fn delete_skill_alias(&self, alias: &str) -> Result<bool, ClientError> {
+        let url = format!("{}/skill-aliases", self.config.base_url.trim_end_matches('/'));
+        let response = self
+            .http
+            .delete(url)
+            .bearer_auth(&self.config.api_token)
+            .query(&[("alias", alias)])
+            .send()
+            .await?;
+
+        if response.status().as_u16() == 401 {
+            return Err(ClientError::Unauthorized);
+        }
+        let body: serde_json::Value = response.error_for_status()?.json().await?;
+        Ok(body.get("deleted").and_then(|v| v.as_bool()).unwrap_or(false))
     }
 }
 
@@ -127,5 +180,100 @@ mod tests {
         let result = client_for(&server).list_fiches(50).await;
 
         assert!(matches!(result, Err(ClientError::Request(_))));
+    }
+
+    #[tokio::test]
+    async fn list_skill_aliases_sends_bearer_token() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/skill-aliases"))
+            .and(header("Authorization", "Bearer test-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {"alias_key": "powerbi", "canonical": "Power BI", "updated_at": "2026-08-04T00:00:00Z"}
+            ])))
+            .mount(&server)
+            .await;
+
+        let aliases = client_for(&server).list_skill_aliases().await.unwrap();
+
+        assert_eq!(aliases.len(), 1);
+        assert_eq!(aliases[0].alias_key, "powerbi");
+        assert_eq!(aliases[0].canonical, "Power BI");
+    }
+
+    #[tokio::test]
+    async fn list_skill_aliases_maps_401_to_unauthorized() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/skill-aliases"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let result = client_for(&server).list_skill_aliases().await;
+
+        assert!(matches!(result, Err(ClientError::Unauthorized)));
+    }
+
+    #[tokio::test]
+    async fn upsert_skill_alias_sends_json_body() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/skill-aliases"))
+            .and(header("Authorization", "Bearer test-token"))
+            .and(wiremock::matchers::body_json(serde_json::json!({"alias": "PowerBI", "canonical": "Power BI"})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!(
+                {"alias_key": "powerbi", "canonical": "Power BI", "updated_at": "2026-08-04T00:00:00Z"}
+            )))
+            .mount(&server)
+            .await;
+
+        let alias = client_for(&server).upsert_skill_alias("PowerBI", "Power BI").await.unwrap();
+
+        assert_eq!(alias.alias_key, "powerbi");
+    }
+
+    #[tokio::test]
+    async fn upsert_skill_alias_maps_401_to_unauthorized() {
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .and(path("/skill-aliases"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let result = client_for(&server).upsert_skill_alias("rag", "RAG").await;
+
+        assert!(matches!(result, Err(ClientError::Unauthorized)));
+    }
+
+    #[tokio::test]
+    async fn delete_skill_alias_sends_alias_as_query_param_not_body() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path("/skill-aliases"))
+            .and(query_param("alias", "rag"))
+            .and(header("Authorization", "Bearer test-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"alias_key": "rag", "deleted": true})))
+            .mount(&server)
+            .await;
+
+        let deleted = client_for(&server).delete_skill_alias("rag").await.unwrap();
+
+        assert!(deleted);
+    }
+
+    #[tokio::test]
+    async fn delete_skill_alias_maps_401_to_unauthorized() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path("/skill-aliases"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let result = client_for(&server).delete_skill_alias("rag").await;
+
+        assert!(matches!(result, Err(ClientError::Unauthorized)));
     }
 }

@@ -132,7 +132,9 @@ def test_extract_normalizes_stack():
 
     extraction = extract(MISSION, client=client)
 
-    assert extraction.stack == ["python", "RAG"]
+    # "Python" drops as a case-duplicate of "python" (first-seen kept);
+    # "RAG Systems" stays distinct — no more semantic synonym folding here.
+    assert extraction.stack == ["python", "RAG Systems"]
 
 
 def test_extract_raises_extraction_failed_after_repeated_timeouts():

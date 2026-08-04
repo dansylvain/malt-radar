@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from malt_radar_aggregator import api
+from malt_radar_aggregator.storage import init_skill_aliases_table
 from malt_radar_ingestion.models import Mission
 from malt_radar_ingestion.storage import init_db, upsert_missions
 
@@ -37,7 +38,12 @@ def make_mission(**overrides) -> Mission:
 
 @pytest.fixture
 def conn():
-    return init_db(":memory:")
+    # api.get_conn() is bypassed by the `client` fixture's dependency
+    # override below, so init_skill_aliases_table must be called here too
+    # (get_conn() only runs it lazily on the first real request).
+    c = init_db(":memory:")
+    init_skill_aliases_table(c)
+    return c
 
 
 @pytest.fixture
@@ -158,6 +164,92 @@ def test_list_fiches_empty_when_dir_missing(client):
 
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_get_skill_aliases_requires_token(client):
+    response = client.get("/skill-aliases")
+
+    assert response.status_code == 401
+
+
+def test_get_skill_aliases_returns_empty_list_initially(client):
+    response = client.get("/skill-aliases", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_put_skill_alias_requires_token(client):
+    response = client.put("/skill-aliases", json={"alias": "rag", "canonical": "RAG"})
+
+    assert response.status_code == 401
+
+
+def test_put_skill_alias_creates_row(client):
+    response = client.put("/skill-aliases", json={"alias": "PowerBI", "canonical": "Power BI"}, headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["alias_key"] == "powerbi"
+    assert body["canonical"] == "Power BI"
+
+    listed = client.get("/skill-aliases", headers=auth_headers()).json()
+    assert len(listed) == 1
+    assert listed[0]["alias_key"] == "powerbi"
+
+
+def test_put_skill_alias_upserts_existing_key_case_insensitively(client):
+    client.put("/skill-aliases", json={"alias": "PowerBI", "canonical": "Power BI"}, headers=auth_headers())
+
+    response = client.put(
+        "/skill-aliases", json={"alias": "powerbi", "canonical": "Microsoft Power BI"}, headers=auth_headers()
+    )
+
+    assert response.status_code == 200
+    listed = client.get("/skill-aliases", headers=auth_headers()).json()
+    assert len(listed) == 1
+    assert listed[0]["canonical"] == "Microsoft Power BI"
+
+
+def test_put_skill_alias_rejects_empty_alias(client):
+    response = client.put("/skill-aliases", json={"alias": "   ", "canonical": "RAG"}, headers=auth_headers())
+
+    assert response.status_code == 422
+
+
+def test_put_skill_alias_rejects_empty_canonical(client):
+    response = client.put("/skill-aliases", json={"alias": "rag", "canonical": "  "}, headers=auth_headers())
+
+    assert response.status_code == 422
+
+
+def test_delete_skill_alias_requires_token(client):
+    response = client.delete("/skill-aliases", params={"alias": "rag"})
+
+    assert response.status_code == 401
+
+
+def test_delete_skill_alias_removes_and_reports_true(client):
+    client.put("/skill-aliases", json={"alias": "rag", "canonical": "RAG"}, headers=auth_headers())
+
+    response = client.delete("/skill-aliases", params={"alias": "rag"}, headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json() == {"alias_key": "rag", "deleted": True}
+    assert client.get("/skill-aliases", headers=auth_headers()).json() == []
+
+
+def test_delete_skill_alias_missing_reports_false_not_404(client):
+    response = client.delete("/skill-aliases", params={"alias": "does-not-exist"}, headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json() == {"alias_key": "does-not-exist", "deleted": False}
+
+
+def test_delete_skill_alias_missing_query_param_returns_422(client):
+    response = client.delete("/skill-aliases", headers=auth_headers())
+
+    assert response.status_code == 422
 
 
 def test_missing_server_token_config_returns_503(conn, tmp_path, monkeypatch):

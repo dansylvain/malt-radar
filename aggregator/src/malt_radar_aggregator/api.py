@@ -10,6 +10,12 @@ the read side consumed by the Phase 4 TUI.
   fiches already generated, as parsed frontmatter. Minimal stand-in until
   Phase 3's weekly aggregation/digest lands — no metrics here, just the
   raw fiche fields.
+- GET/PUT/DELETE /skill-aliases — the persisted, editable skill-name
+  alias table (raw/cleaned string -> canonical display name). Fiches are
+  never mutated; the TUI applies this table to `stack` entries at display
+  time, so editing an alias here instantly corrects every fiche that ever
+  used that raw string, no backfill. Edited live from the TUI's Skill
+  Audit view.
 
 See ROADMAP.md (Phase 2/4) and CLAUDE.md's network section — this API is
 reached only over Tailscale, never a public port (see server.py).
@@ -27,6 +33,12 @@ from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from malt_radar_aggregator.auth import require_token
+from malt_radar_aggregator.storage import (
+    delete_skill_alias,
+    init_skill_aliases_table,
+    list_skill_aliases,
+    upsert_skill_alias,
+)
 from malt_radar_ingestion.storage import DEFAULT_DB_PATH, fetch_unprocessed, get_mission, init_db, mark_processed
 
 FICHES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "fiches"
@@ -48,12 +60,18 @@ def get_conn() -> sqlite3.Connection:
     if _conn is None:
         db_path = os.environ.get("AGGREGATOR_DB_PATH", str(DEFAULT_DB_PATH))
         _conn = init_db(db_path)
+        init_skill_aliases_table(_conn)
     return _conn
 
 
 class FicheSubmission(BaseModel):
     mission_id: int
     markdown: str
+
+
+class SkillAliasUpsert(BaseModel):
+    alias: str
+    canonical: str
 
 
 def _fiche_filename(source: str, external_id: str) -> str:
@@ -118,3 +136,33 @@ def list_fiches(
         if fiche is not None:
             fiches.append(fiche)
     return fiches
+
+
+@app.get("/skill-aliases")
+def list_aliases(
+    conn: sqlite3.Connection = Depends(get_conn),
+    _token: None = Depends(require_token),
+) -> list[dict]:
+    return list_skill_aliases(conn)
+
+
+@app.put("/skill-aliases")
+def put_alias(
+    payload: SkillAliasUpsert,
+    conn: sqlite3.Connection = Depends(get_conn),
+    _token: None = Depends(require_token),
+) -> dict:
+    if not payload.alias.strip() or not payload.canonical.strip():
+        raise HTTPException(status_code=422, detail="alias and canonical must be non-empty")
+    return upsert_skill_alias(conn, payload.alias, payload.canonical)
+
+
+@app.delete("/skill-aliases")
+def delete_alias(
+    alias: str,
+    conn: sqlite3.Connection = Depends(get_conn),
+    _token: None = Depends(require_token),
+) -> dict:
+    # `alias` as a required query param, not a path segment: skill strings
+    # can contain "/" (e.g. "CI/CD"), which would break path routing.
+    return {"alias_key": alias.strip().lower(), "deleted": delete_skill_alias(conn, alias)}
