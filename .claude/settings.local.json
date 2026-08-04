@@ -31,7 +31,11 @@
       "Bash(curl -s -A \"MaltRadarBot/0.1 \\(personal market-research project; contact: dansylvain84@gmail.com\\)\" \"https://www.free-work.com/api/job_postings?itemsPerPage=1&premium=false&page=1\")",
       "WebFetch(domain:gist.github.com)",
       "WebFetch(domain:www.emploi-store-dev.fr)",
-      "Bash(git status *)"
+      "Bash(git status *)",
+      "Bash(dpkg -l)",
+      "Bash(apt list *)",
+      "Bash(.venv/bin/python -m pytest tests/ -q)",
+      "Bash(.venv/bin/python *)"
     ]
   }
 }
