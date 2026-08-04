@@ -1,0 +1,16 @@
+[Unit]
+Description=Malt-Radar aggregator: HTTP API (pull/push) for the Pi5 worker
+Wants=network-online.target
+After=network-online.target tailscaled.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/projects/malt-radar/aggregator
+EnvironmentFile=/root/projects/malt-radar/aggregator/.env
+ExecStart=/root/projects/malt-radar/aggregator/.venv/bin/python -m malt_radar_aggregator.server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
