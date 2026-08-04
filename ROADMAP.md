@@ -110,12 +110,26 @@ Décisions d'architecture (2026-08-03) :
   de métriques agrégées ni de digest, ça reste le rôle de la Phase 3.
   Toujours protégé par `AGGREGATOR_API_TOKEN` (le TUI devra donc connaître
   ce secret, comme le worker).
-- Workspace Cargo (`core`, `tui`, `client`).
-- Layout Ratatui : Market Metrics, Live Feed, Skills Frequency, Digest,
-  footer de commandes.
-- Client HTTP async (reqwest/tokio) vers l'API VPS/Pi.
-- Navigation clavier : filtre stack, refresh, export markdown, system
-  health.
+- ✅ Workspace Cargo créé sous `tui/` : `core` (types + calculs purs,
+  `compute_metrics`), `client` (HTTP async `reqwest` vers `GET /fiches`,
+  config par variables d'env), `app` (binaire `malt-radar-tui`). Écart
+  volontaire au nom prévu : le crate du binaire s'appelle `app`, pas
+  `tui`, pour éviter la confusion `tui/tui/` — voir `tui/README.md`.
+- ✅ Layout Ratatui : Market Metrics, Live Feed, Skills Frequency, Digest
+  (placeholder), footer de commandes (`q` quitter, `r` refresh). Market
+  Metrics/Skills Frequency calculés côté client à partir de `GET /fiches`
+  brut, pas d'une agrégation Phase 3 — voir amendement ci-dessus.
+- ✅ Client HTTP async (reqwest/tokio) vers `GET /fiches` sur l'aggregator
+  VPS, refresh en tâche de fond (toutes les 60s ou sur `r`), testé contre
+  un serveur mocké (`wiremock`) — 8 tests (`core` + `client`), tout passe.
+  Testé aussi en conditions quasi réelles (aggregator local + fiche de
+  démo, capture brute du flux Ratatui) : le TUI affiche bien Market
+  Metrics/Skills Frequency/Live Feed et se met à jour après le fetch.
+- ⬜ **Reste à faire par Dan** : `cp tui/.env.example tui/.env`, renseigner
+  l'IP Tailscale du VPS et le vrai `AGGREGATOR_API_TOKEN`, `cargo run -p
+  malt-radar-tui` depuis `tui/` contre le vrai cluster.
+- ⬜ Navigation clavier avancée : filtre stack, export markdown, system
+  health — pas encore implémentés (seuls `q`/`r` existent pour l'instant).
 - ⚠️ **Rappel licence France Travail** (voir `SOURCES.md`) : le panneau
   "Live Feed" ne doit pas exposer publiquement des annonces individuelles
   issues de France Travail à des tiers — usage personnel uniquement, pas

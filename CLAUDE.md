@@ -90,8 +90,10 @@ un dossier à la racine, déployé/exécuté sur une seule machine du cluster.
   greffer en Phase 3. Dépend de `ingestion/` (réutilise `storage.py` en
   éditable local plutôt que de dupliquer le schéma SQLite). **Existe
   déjà** (squelette Phase 2 — déploiement VPS restant).
-- `tui/` — Rust workspace (Ratatui/Tokio), poste de travail/WSL2. Pas
-  encore créé (Phase 4).
+- `tui/` — Rust workspace (Ratatui/Tokio), poste de travail/WSL2. Client
+  HTTP pur vers `aggregator/` (jamais d'accès direct DB/filesystem
+  cluster). **Existe déjà** (Phase 4, scaffold complet — connexion au
+  vrai VPS via `.env` restante côté Dan).
 
 Chaque service a son propre gestionnaire de dépendances/build (pas de
 tooling partagé forcé entre Python et Rust) — exception : `aggregator/`

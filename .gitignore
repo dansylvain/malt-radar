@@ -6,7 +6,7 @@ __pycache__/
 .pytest_cache/
 
 # Rust
-/target/
+target/
 
 # Data (never commit scraped/generated data)
 *.db

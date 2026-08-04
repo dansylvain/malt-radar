@@ -35,7 +35,19 @@
       "Bash(dpkg -l)",
       "Bash(apt list *)",
       "Bash(.venv/bin/python -m pytest tests/ -q)",
-      "Bash(.venv/bin/python *)"
+      "Bash(.venv/bin/python *)",
+      "Bash(cargo --version)",
+      "Bash(rustc --version)",
+      "Bash(cargo build *)",
+      "Bash(cargo test *)",
+      "Bash(cargo run *)",
+      "Bash(pkill -f \"malt-radar-tui\")",
+      "Bash(pkill -f \"cargo run\")",
+      "Bash(pkill -f malt-radar-tui)",
+      "Read(//tmp/**)",
+      "Bash(pkill -9 -f malt-radar-tui)",
+      "Bash(pkill -9 -f \"target/debug\")",
+      "Bash(cargo clippy *)"
     ]
   }
 }
