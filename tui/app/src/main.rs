@@ -2,11 +2,11 @@
 //! Tailscale and renders it. No local state beyond what's fetched — the
 //! client machine never touches the DB or the filesystem on the VPS/Pi5.
 //!
-//! Deliberately thin for now: `Market Metrics` and `Skills Frequency` are
+//! Deliberately thin for now: `Market Metrics` and `Top Skills` are
 //! computed client-side from the raw fiche list (`malt_radar_core::compute_metrics`)
 //! rather than read from a weekly aggregation, because Phase 3 (the service
-//! that would produce that aggregation) doesn't exist yet. `Digest` is a
-//! placeholder for the same reason.
+//! that would produce that aggregation) doesn't exist yet. The digest panel
+//! is a placeholder for the same reason.
 
 use std::io;
 use std::time::{Duration, Instant};
@@ -15,17 +15,20 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use malt_radar_client::{AggregatorClient, AggregatorConfig};
-use malt_radar_core::{compute_metrics, Fiche, MarketMetrics};
+use malt_radar_core::{compute_metrics, truncate_label, Fiche, MarketMetrics};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use ratatui::{Frame, Terminal};
 use tokio::sync::mpsc;
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(60);
-const TOP_SKILLS: usize = 8;
+const TOP_SKILLS: usize = 5;
+const SKILL_BAR_WIDTH: usize = 24;
+const SKILL_NAME_WIDTH: usize = 16;
+const ACCENT_COLOR: Color = Color::Cyan;
 const FICHES_LIMIT: u32 = 100;
 const POLL_INTERVAL: Duration = Duration::from_millis(150);
 
@@ -160,23 +163,24 @@ async fn run(
 fn draw(frame: &mut Frame, app: &App, last_refreshed: Option<Instant>) {
     let root = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(9), Constraint::Min(5), Constraint::Length(1)])
+        .constraints([
+            Constraint::Length(9),
+            Constraint::Fill(2),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ])
         .split(frame.area());
 
     let top = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(34),
-            Constraint::Percentage(33),
-            Constraint::Percentage(33),
-        ])
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(root[0]);
 
     draw_market_metrics(frame, top[0], &app.metrics);
-    draw_skills_frequency(frame, top[1], &app.metrics);
-    draw_digest_placeholder(frame, top[2]);
+    draw_top_skills(frame, top[1], &app.metrics);
     draw_live_feed(frame, root[1], &app.fiches);
-    draw_footer(frame, root[2], app, last_refreshed);
+    draw_digest(frame, root[2]);
+    draw_footer(frame, root[3], app, last_refreshed);
 }
 
 fn draw_market_metrics(frame: &mut Frame, area: Rect, metrics: &MarketMetrics) {
@@ -184,34 +188,54 @@ fn draw_market_metrics(frame: &mut Frame, area: Rect, metrics: &MarketMetrics) {
         .avg_tjm
         .map(|v| format!("{v:.0} EUR/j"))
         .unwrap_or_else(|| "n/a".to_string());
+    let top_skill = metrics
+        .top_skills
+        .first()
+        .map(|s| format!("{} ({}%)", s.name, s.percent_rounded))
+        .unwrap_or_else(|| "n/a".to_string());
     let lines = vec![
         Line::from(format!("Fiches : {}", metrics.fiche_count)),
         Line::from(format!("TJM moyen : {avg_tjm}")),
+        Line::from(format!("Top skill demandé : {top_skill}")),
     ];
     let paragraph = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Market Metrics"));
     frame.render_widget(paragraph, area);
 }
 
-fn draw_skills_frequency(frame: &mut Frame, area: Rect, metrics: &MarketMetrics) {
-    let items: Vec<ListItem> = metrics
+fn draw_top_skills(frame: &mut Frame, area: Rect, metrics: &MarketMetrics) {
+    let lines: Vec<Line> = metrics
         .top_skills
         .iter()
-        .map(|(skill, count)| ListItem::new(format!("{skill} — {count}")))
+        .map(|skill| {
+            // Fraction absolue de 100%, pas relative au plus grand count
+            // affiché — sinon "Autres" (souvent le plus gros poste) remplit
+            // toujours sa barre à 100% quel que soit son vrai pourcentage.
+            let filled = ((skill.percent / 100.0) * SKILL_BAR_WIDTH as f64).round() as usize;
+            let bar = format!("{}{}", "█".repeat(filled), " ".repeat(SKILL_BAR_WIDTH - filled));
+            let name = truncate_label(&skill.name, SKILL_NAME_WIDTH);
+            Line::from(vec![
+                Span::raw(format!("{name:<SKILL_NAME_WIDTH$}")),
+                Span::raw("["),
+                Span::styled(bar, Style::default().fg(ACCENT_COLOR)),
+                Span::raw(format!("] {}%", skill.percent_rounded)),
+            ])
+        })
         .collect();
-    let list = List::new(items).block(Block::default().borders(Borders::ALL).title("Skills Frequency"));
-    frame.render_widget(list, area);
+    let paragraph = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Top Skills"));
+    frame.render_widget(paragraph, area);
 }
 
-fn draw_digest_placeholder(frame: &mut Frame, area: Rect) {
+fn draw_digest(frame: &mut Frame, area: Rect) {
     let paragraph = Paragraph::new("Digest hebdomadaire : Phase 3 pas encore implémentée.")
-        .block(Block::default().borders(Borders::ALL).title("Digest"));
+        .block(Block::default().borders(Borders::ALL).title("DAILY AI STRATEGY DIGEST"));
     frame.render_widget(paragraph, area);
 }
 
 fn draw_live_feed(frame: &mut Frame, area: Rect, fiches: &[Fiche]) {
     let items: Vec<ListItem> = fiches
         .iter()
-        .map(|fiche| {
+        .enumerate()
+        .map(|(i, fiche)| {
             let title = fiche.title.as_deref().unwrap_or("(sans titre)");
             let company = fiche.company.as_deref().unwrap_or("?");
             let tjm = fiche
@@ -219,11 +243,29 @@ fn draw_live_feed(frame: &mut Frame, area: Rect, fiches: &[Fiche]) {
                 .map(|v| format!("{v:.0} EUR/j"))
                 .unwrap_or_else(|| "TJM n/a".to_string());
             let stack = if fiche.stack.is_empty() {
-                String::new()
+                "(stack non extraite)".to_string()
             } else {
-                format!(" [{}]", fiche.stack.join(", "))
+                fiche.stack.join(", ")
             };
-            ListItem::new(format!("{title} — {company} — {tjm}{stack}"))
+
+            // Sur deux lignes : la ligne stack débordait souvent la largeur
+            // du panneau (List ne wrap pas comme Paragraph), d'où la coupure
+            // sans retour à la ligne observée.
+            let text = Text::from(vec![
+                Line::from(format!("{title} — {company} — {tjm}")),
+                Line::from(format!("  {stack}")),
+            ]);
+
+            // Une ligne sur deux en couleur d'accent (même teinte que les
+            // barres de Top Skills) pour distinguer les annonces d'un coup
+            // d'œil, sans toucher au fond.
+            let style = if i % 2 == 1 {
+                Style::default().fg(ACCENT_COLOR)
+            } else {
+                Style::default()
+            };
+
+            ListItem::new(text).style(style)
         })
         .collect();
     let list = List::new(items).block(
