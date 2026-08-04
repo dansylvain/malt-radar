@@ -2,7 +2,7 @@
 Description=Daily trigger for malt-radar-ingest.service
 
 [Timer]
-OnCalendar=*-*-* 06:00:00
+OnCalendar=*-*-* 06:00:00 UTC
 RandomizedDelaySec=1800
 Persistent=true
 
