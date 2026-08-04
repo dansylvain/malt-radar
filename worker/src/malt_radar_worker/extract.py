@@ -53,7 +53,9 @@ def build_prompt(mission: dict) -> str:
     context = "\n".join(
         [
             f"Titre: {mission.get('title', '')}",
-            f"Métier: {mission.get('job_name', '')}",
+            "Catégorie de métier Free-Work (classification large — les exemples "
+            "entre parenthèses illustrent le type de métier en général, ce ne sont "
+            f"PAS des compétences requises pour cette mission précise): {mission.get('job_name', '')}",
             f"Compétences déjà listées: {', '.join(mission.get('skills') or [])}",
             f"TJM min/max déjà connus: {mission.get('min_daily_salary')}/{mission.get('max_daily_salary')}",
             f"Texte salaire brut: {mission.get('raw_salary_text') or ''}",
@@ -65,7 +67,12 @@ def build_prompt(mission: dict) -> str:
         "Tu extrais des informations structurées d'une offre de mission freelance "
         "en France dans le domaine de l'IA/Data engineering. Utilise les champs déjà "
         "connus comme indices mais corrige-les si la description les contredit. "
-        "Ajoute à stack toute compétence qui n'apparaît que dans la description. "
+        "N'ajoute à stack QUE des technologies explicitement nommées dans "
+        "\"Compétences déjà listées\" ou dans \"Description\" — jamais les exemples "
+        "entre parenthèses de la catégorie de métier, et jamais un fragment recopié "
+        "tel quel du titre qui ne nomme pas une technologie précise. Si aucune "
+        "technologie précise n'apparaît dans ces deux champs, renvoie stack: [] "
+        "plutôt que d'en inventer une. "
         "La catégorie doit refléter le sujet dominant de la mission — choisis "
         "\"Autre\" plutôt que de forcer une catégorie qui ne correspond pas.\n\n"
         f"{context}\n\n{_SCHEMA_HINT}"
