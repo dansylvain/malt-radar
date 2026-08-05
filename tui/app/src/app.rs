@@ -11,7 +11,7 @@ use std::time::Instant;
 use chrono::Utc;
 use malt_radar_core::{
     alias_keys_targeting, compute_metrics, filter_fiches, new_filenames, resolve_fiche_skills, skill_audit,
-    tjm_trend, Fiche, MarketMetrics, SkillCount, SkillFilter, TjmTrend, OTHERS_LABEL, TREND_MIN_SAMPLE,
+    tjm_trend, Digest, Fiche, MarketMetrics, SkillCount, SkillFilter, TjmTrend, OTHERS_LABEL, TREND_MIN_SAMPLE,
     TREND_WINDOW_DAYS,
 };
 use ratatui::widgets::ListState;
@@ -48,15 +48,23 @@ pub enum Mode {
     /// A centered overlay listing the keymap, since it outgrew what the
     /// one-line footer can show.
     Help,
+    /// Full-screen view of the current digest's full Markdown (`content`),
+    /// entered with `Enter` while `Focus::Digest` — the dashboard panel
+    /// only ever shows `summary_short`, which has no room for the whole
+    /// 5-section narrative.
+    DigestFull,
 }
 
-/// Which dashboard panel arrow-key navigation and `Enter` apply to. Only
-/// two panels participate — Market Metrics and the Digest are read-only —
-/// so `cycle_focus` is a plain toggle rather than a true cycle.
+/// Which dashboard panel arrow-key navigation and `Enter` apply to. Market
+/// Metrics never participates — it has no rows or scroll position of its
+/// own. Digest does participate despite being read-only content (no
+/// selection, no `Enter` action): focusing it is what routes `↑`/`↓` to
+/// `digest_scroll` instead of the feed/skills selection.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Focus {
     TopSkills,
     LiveFeed,
+    Digest,
 }
 
 /// `SkillAudit` splits into two columns (`←`/`→` switches focus): skills
@@ -191,6 +199,21 @@ pub struct App {
     /// (`reselect_top_skills`) on every recompute, same discipline as the
     /// Live Feed and the skill audit view.
     pub top_skills_state: ListState,
+    /// `None` before the daily digest job's first run (see
+    /// `FetchOutcome::DigestOk`) — a normal state, not an error; the panel
+    /// renders an explanatory message rather than blank content.
+    pub digest: Option<Digest>,
+    /// Line offset into `digest.summary_short` as shown in the dashboard
+    /// panel, same unbounded-`saturating` discipline as `detail_scroll`
+    /// (see `digest_scroll_by`) — reset to 0 only when a genuinely new
+    /// digest arrives (`apply`), not on every periodic refetch of the same
+    /// one.
+    pub digest_scroll: u16,
+    /// Line offset into `digest.content` as shown by `Mode::DigestFull` —
+    /// separate from `digest_scroll` since the two views scroll
+    /// independently (leaving the full view mid-read while dashboard state
+    /// updates around it shouldn't move it, and vice versa).
+    pub digest_full_scroll: u16,
     pub status_line: String,
     pub loading: bool,
     pub last_refreshed: Option<Instant>,
@@ -218,6 +241,9 @@ impl App {
             detail_scroll: 0,
             focus: Focus::LiveFeed,
             top_skills_state: ListState::default(),
+            digest: None,
+            digest_scroll: 0,
+            digest_full_scroll: 0,
             status_line: "chargement des fiches...".to_string(),
             loading: true,
             last_refreshed: None,
@@ -477,13 +503,47 @@ impl App {
         self.top_skills_state.select(Some(clamped));
     }
 
-    /// Only two panels participate in dashboard focus, so cycling forward
-    /// or backward is the same toggle either way.
+    /// `Tab`/`BackTab` both step forward through this fixed order — same as
+    /// before Digest joined focus, just no longer a 2-way toggle.
     pub fn cycle_focus(&mut self) {
         self.focus = match self.focus {
             Focus::TopSkills => Focus::LiveFeed,
-            Focus::LiveFeed => Focus::TopSkills,
+            Focus::LiveFeed => Focus::Digest,
+            Focus::Digest => Focus::TopSkills,
         };
+    }
+
+    /// Scrolls the Digest panel by `delta` lines (negative = up), clamped
+    /// at 0 — no upper bound, same imprecision as `detail_scroll`
+    /// (`draw_fiche_detail`): scrolling past the end of the content just
+    /// renders blank space rather than being clamped to the last line,
+    /// since knowing the true last line needs the wrapped line count,
+    /// which depends on the render width `App` doesn't have.
+    pub fn digest_scroll_by(&mut self, delta: i32) {
+        let current = self.digest_scroll as i32;
+        self.digest_scroll = (current + delta).max(0) as u16;
+    }
+
+    /// Opens the full-screen digest view — a no-op if there's no digest to
+    /// show yet (mirrors `open_fiche_detail`'s guard), so `Enter` on an
+    /// empty Digest panel just does nothing rather than opening a blank
+    /// screen.
+    pub fn open_digest_full(&mut self) {
+        if self.digest.is_none() {
+            return;
+        }
+        self.digest_full_scroll = 0;
+        self.mode = Mode::DigestFull;
+    }
+
+    pub fn close_digest_full(&mut self) {
+        self.mode = Mode::Dashboard;
+    }
+
+    /// Same clamped-at-0, no-upper-bound discipline as `digest_scroll_by`.
+    pub fn digest_full_scroll_by(&mut self, delta: i32) {
+        let current = self.digest_full_scroll as i32;
+        self.digest_full_scroll = (current + delta).max(0) as u16;
     }
 
     pub fn top_skills_move(&mut self, delta: isize) {
@@ -659,6 +719,18 @@ impl App {
                 // server-side delete just means it'll reappear on the next
                 // periodic refetch rather than staying gone.
                 self.status_line = format!("erreur suppression: {message}");
+            }
+            FetchOutcome::DigestOk(digest) => {
+                // Reset scroll only when the digest actually changed (by
+                // `id`, including the None<->Some transitions) — every
+                // periodic refetch of the *same* digest must leave a
+                // mid-read scroll position alone.
+                let changed = self.digest.as_ref().map(|d| d.id) != digest.as_ref().map(|d| d.id);
+                self.digest = digest;
+                if changed {
+                    self.digest_scroll = 0;
+                    self.digest_full_scroll = 0;
+                }
             }
         }
     }

@@ -2,11 +2,13 @@
 //! Tailscale and renders it. No local state beyond what's fetched — the
 //! client machine never touches the DB or the filesystem on the VPS/Pi5.
 //!
-//! Deliberately thin for now: `Market Metrics` and `Top Skills` are
-//! computed client-side from the raw fiche list (`malt_radar_core::compute_metrics`)
-//! rather than read from a weekly aggregation, because Phase 3 (the service
-//! that would produce that aggregation) doesn't exist yet. The digest panel
-//! is a placeholder for the same reason.
+//! Deliberately thin: `Market Metrics` and `Top Skills` are computed
+//! client-side from the raw fiche list (`malt_radar_core::compute_metrics`)
+//! rather than read from the aggregator's own aggregation, so they update
+//! on every fiche fetch rather than once a day. The Digest panel is the
+//! one exception — it reads `GET /digest` directly (see `tasks::fetch_loop`),
+//! since it shows Claude's own narrative synthesis, not a client-computable
+//! metric.
 //!
 //! Layering: `tasks` talks to the network, `app` holds state, `events`
 //! turns keys into state changes, `ui` renders. Only this file knows about

@@ -33,6 +33,7 @@ def make_digest_kwargs(**overrides) -> dict:
         fiche_count=12,
         metrics={"fiche_count": 12, "tjm": {"median": 500}},
         trend={"delta": None},
+        summary_short="Résumé court.",
         content="## Résumé exécutif\n...",
     )
     defaults.update(overrides)
@@ -112,6 +113,37 @@ def test_get_latest_digest_returns_none_on_empty_table():
     c = digests_conn()
 
     assert get_latest_digest(c) is None
+
+
+def test_get_latest_digest_falls_back_to_content_slice_for_pre_migration_rows():
+    """Rows written before `summary_short` existed (pre-migration digests
+    table) have no value for it — the read path must still return something
+    usable in the panel instead of an empty string."""
+    c = digests_conn()
+    kwargs = make_digest_kwargs()
+    c.execute(
+        """
+        INSERT INTO digests
+            (created_at, window_start, window_end, window_days, model, fiche_count, metrics_json, trend_json, content)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "2026-08-01T00:00:00+00:00",
+            kwargs["window_start"],
+            kwargs["window_end"],
+            kwargs["window_days"],
+            kwargs["model"],
+            kwargs["fiche_count"],
+            "{}",
+            "{}",
+            kwargs["content"],
+        ),
+    )
+    c.commit()
+
+    latest = get_latest_digest(c)
+
+    assert latest["summary_short"] == kwargs["content"][:280]
 
 
 def test_list_digests_orders_newest_first_and_respects_limit():

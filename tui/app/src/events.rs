@@ -45,6 +45,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent, cmds: &Commands) -> Flow {
         Mode::FeedFilter => handle_feed_filter_key(app, key),
         Mode::FicheDetail => handle_fiche_detail_key(app, key, cmds),
         Mode::Help => handle_help_key(app, key),
+        Mode::DigestFull => handle_digest_full_key(app, key),
     }
 }
 
@@ -75,30 +76,40 @@ fn handle_dashboard_key(app: &mut App, key: KeyEvent, cmds: &Commands) -> Flow {
         KeyCode::Enter => match app.focus {
             Focus::LiveFeed => app.open_fiche_detail(),
             Focus::TopSkills => app.apply_selected_skill_filter(),
+            Focus::Digest => app.open_digest_full(),
         },
         KeyCode::Down | KeyCode::Char('j') => match app.focus {
             Focus::LiveFeed => app.feed_move(1),
             Focus::TopSkills => app.top_skills_move(1),
+            Focus::Digest => app.digest_scroll_by(1),
         },
         KeyCode::Up | KeyCode::Char('k') => match app.focus {
             Focus::LiveFeed => app.feed_move(-1),
             Focus::TopSkills => app.top_skills_move(-1),
+            Focus::Digest => app.digest_scroll_by(-1),
         },
         KeyCode::PageDown => match app.focus {
             Focus::LiveFeed => app.feed_move(PAGE_JUMP as isize),
             Focus::TopSkills => app.top_skills_move(PAGE_JUMP as isize),
+            Focus::Digest => app.digest_scroll_by(PAGE_JUMP as i32),
         },
         KeyCode::PageUp => match app.focus {
             Focus::LiveFeed => app.feed_move(-(PAGE_JUMP as isize)),
             Focus::TopSkills => app.top_skills_move(-(PAGE_JUMP as isize)),
+            Focus::Digest => app.digest_scroll_by(-(PAGE_JUMP as i32)),
         },
         KeyCode::Home => match app.focus {
             Focus::LiveFeed => app.feed_select_first(),
             Focus::TopSkills => app.top_skills_select_first(),
+            Focus::Digest => app.digest_scroll = 0,
         },
+        // Digest has no `End` behavior: the true last line depends on the
+        // wrapped line count, which needs the render width — not known
+        // here (same limitation `digest_scroll_by`'s doc comment notes).
         KeyCode::End => match app.focus {
             Focus::LiveFeed => app.feed_select_last(),
             Focus::TopSkills => app.top_skills_select_last(),
+            Focus::Digest => {}
         },
         _ => {}
     }
@@ -117,6 +128,23 @@ fn handle_fiche_detail_key(app: &mut App, key: KeyEvent, cmds: &Commands) -> Flo
         KeyCode::Char('d') => app.delete_detail_fiche(cmds.fiche_cmd_tx),
         KeyCode::Down | KeyCode::Char('j') => app.detail_scroll_down(),
         KeyCode::Up | KeyCode::Char('k') => app.detail_scroll_up(),
+        _ => {}
+    }
+    Flow::Continue
+}
+
+/// Full-screen view of the current digest's full Markdown — same
+/// `Esc`/`Enter`-both-close and `j`/`k`-scroll shape as
+/// `handle_fiche_detail_key`, minus the fiche-specific actions (`o`, `d`).
+fn handle_digest_full_key(app: &mut App, key: KeyEvent) -> Flow {
+    match key.code {
+        KeyCode::Char('q') => return Flow::Quit,
+        KeyCode::Esc | KeyCode::Enter => app.close_digest_full(),
+        KeyCode::Down | KeyCode::Char('j') => app.digest_full_scroll_by(1),
+        KeyCode::Up | KeyCode::Char('k') => app.digest_full_scroll_by(-1),
+        KeyCode::PageDown => app.digest_full_scroll_by(PAGE_JUMP as i32),
+        KeyCode::PageUp => app.digest_full_scroll_by(-(PAGE_JUMP as i32)),
+        KeyCode::Home => app.digest_full_scroll = 0,
         _ => {}
     }
     Flow::Continue
@@ -194,7 +222,15 @@ mod tests {
     use super::*;
     use crate::tasks::{FetchOutcome, FICHES_LIMIT};
     use chrono::{Duration, Utc};
-    use malt_radar_core::{Fiche, SkillFilter};
+    use malt_radar_core::{Digest, Fiche, SkillFilter};
+
+    fn digest(id: i64, content: &str) -> Digest {
+        Digest {
+            id,
+            content: content.to_string(),
+            ..Default::default()
+        }
+    }
 
     fn fiche(filename: &str) -> Fiche {
         Fiche {
@@ -323,7 +359,7 @@ mod tests {
     }
 
     #[test]
-    fn tab_toggles_focus_between_top_skills_and_live_feed() {
+    fn tab_cycles_focus_through_top_skills_live_feed_and_digest() {
         let mut app = App::new();
         assert_eq!(app.focus, Focus::LiveFeed);
         let (refresh_tx, _refresh_rx) = mpsc::unbounded_channel::<()>();
@@ -336,9 +372,85 @@ mod tests {
         };
 
         handle_key(&mut app, key(KeyCode::Tab), &cmds);
+        assert_eq!(app.focus, Focus::Digest);
+        handle_key(&mut app, key(KeyCode::Tab), &cmds);
         assert_eq!(app.focus, Focus::TopSkills);
         handle_key(&mut app, key(KeyCode::Tab), &cmds);
         assert_eq!(app.focus, Focus::LiveFeed);
+    }
+
+    #[test]
+    fn up_down_scroll_the_digest_panel_when_it_has_focus() {
+        let mut app = App::new();
+        app.focus = Focus::Digest;
+        let (refresh_tx, _refresh_rx) = mpsc::unbounded_channel::<()>();
+        let (alias_tx, _alias_rx) = mpsc::unbounded_channel::<AliasCommand>();
+        let (fiche_tx, _fiche_rx) = mpsc::unbounded_channel::<FicheCommand>();
+        let cmds = Commands {
+            refresh_tx: &refresh_tx,
+            alias_cmd_tx: &alias_tx,
+            fiche_cmd_tx: &fiche_tx,
+        };
+
+        handle_key(&mut app, key(KeyCode::Down), &cmds);
+        assert_eq!(app.digest_scroll, 1);
+        handle_key(&mut app, key(KeyCode::Down), &cmds);
+        assert_eq!(app.digest_scroll, 2);
+        handle_key(&mut app, key(KeyCode::Up), &cmds);
+        assert_eq!(app.digest_scroll, 1);
+        // Clamped at 0, never wraps negative.
+        handle_key(&mut app, key(KeyCode::Up), &cmds);
+        handle_key(&mut app, key(KeyCode::Up), &cmds);
+        assert_eq!(app.digest_scroll, 0);
+    }
+
+    #[test]
+    fn enter_on_digest_focus_opens_digest_full_only_when_a_digest_exists() {
+        let mut app = App::new();
+        app.focus = Focus::Digest;
+        let (refresh_tx, _refresh_rx) = mpsc::unbounded_channel::<()>();
+        let (alias_tx, _alias_rx) = mpsc::unbounded_channel::<AliasCommand>();
+        let (fiche_tx, _fiche_rx) = mpsc::unbounded_channel::<FicheCommand>();
+        let cmds = Commands {
+            refresh_tx: &refresh_tx,
+            alias_cmd_tx: &alias_tx,
+            fiche_cmd_tx: &fiche_tx,
+        };
+
+        // No digest yet: Enter is a no-op, mode stays Dashboard.
+        handle_key(&mut app, key(KeyCode::Enter), &cmds);
+        assert_eq!(app.mode, Mode::Dashboard);
+
+        app.digest = Some(digest(1, "## Résumé exécutif\n..."));
+        handle_key(&mut app, key(KeyCode::Enter), &cmds);
+        assert_eq!(app.mode, Mode::DigestFull);
+
+        // Esc and Enter both close it, back to Dashboard.
+        handle_key(&mut app, key(KeyCode::Esc), &cmds);
+        assert_eq!(app.mode, Mode::Dashboard);
+    }
+
+    #[test]
+    fn up_down_scroll_digest_full_independently_of_the_panel_scroll() {
+        let mut app = App::new();
+        app.digest = Some(digest(1, "## Résumé exécutif\n..."));
+        app.mode = Mode::DigestFull;
+        app.digest_scroll = 3; // dashboard panel scroll, must stay untouched
+        let (refresh_tx, _refresh_rx) = mpsc::unbounded_channel::<()>();
+        let (alias_tx, _alias_rx) = mpsc::unbounded_channel::<AliasCommand>();
+        let (fiche_tx, _fiche_rx) = mpsc::unbounded_channel::<FicheCommand>();
+        let cmds = Commands {
+            refresh_tx: &refresh_tx,
+            alias_cmd_tx: &alias_tx,
+            fiche_cmd_tx: &fiche_tx,
+        };
+
+        handle_key(&mut app, key(KeyCode::Down), &cmds);
+        handle_key(&mut app, key(KeyCode::Down), &cmds);
+        assert_eq!(app.digest_full_scroll, 2);
+        handle_key(&mut app, key(KeyCode::Up), &cmds);
+        assert_eq!(app.digest_full_scroll, 1);
+        assert_eq!(app.digest_scroll, 3);
     }
 
     #[test]
@@ -394,6 +506,46 @@ mod tests {
 
         let selected = app.top_skills_state.selected().expect("selection should survive the refresh");
         assert_eq!(app.metrics.top_skills[selected].name, "Python");
+    }
+
+    #[test]
+    fn digest_ok_sets_digest_and_resets_scroll_on_a_new_digest() {
+        let mut app = App::new();
+        app.digest_scroll = 5;
+        app.digest_full_scroll = 9;
+
+        app.apply(FetchOutcome::DigestOk(Some(digest(1, "## Résumé exécutif\n..."))));
+
+        assert_eq!(app.digest.as_ref().map(|d| d.id), Some(1));
+        assert_eq!(app.digest_scroll, 0);
+        assert_eq!(app.digest_full_scroll, 0);
+    }
+
+    #[test]
+    fn digest_ok_preserves_scroll_when_the_same_digest_refetches() {
+        let mut app = App::new();
+        app.apply(FetchOutcome::DigestOk(Some(digest(1, "content"))));
+        app.digest_scroll = 7;
+        app.digest_full_scroll = 4;
+
+        app.apply(FetchOutcome::DigestOk(Some(digest(1, "content"))));
+
+        assert_eq!(app.digest_scroll, 7);
+        assert_eq!(app.digest_full_scroll, 4);
+    }
+
+    #[test]
+    fn digest_ok_none_clears_digest_and_resets_scroll() {
+        let mut app = App::new();
+        app.apply(FetchOutcome::DigestOk(Some(digest(1, "content"))));
+        app.digest_scroll = 3;
+        app.digest_full_scroll = 6;
+
+        app.apply(FetchOutcome::DigestOk(None));
+
+        assert!(app.digest.is_none());
+        assert_eq!(app.digest_scroll, 0);
+        assert_eq!(app.digest_full_scroll, 0);
     }
 
     #[test]

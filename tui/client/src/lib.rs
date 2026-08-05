@@ -2,7 +2,7 @@
 //! (`aggregator/src/malt_radar_aggregator/api.py`). Reached only over
 //! Tailscale — see `CLAUDE.md`'s network section — never a public URL.
 
-use malt_radar_core::{Fiche, SkillAlias};
+use malt_radar_core::{Digest, Fiche, SkillAlias};
 use thiserror::Error;
 
 #[derive(Debug, Clone)]
@@ -132,6 +132,23 @@ impl AggregatorClient {
         }
         let body: serde_json::Value = response.error_for_status()?.json().await?;
         Ok(body.get("deleted").and_then(|v| v.as_bool()).unwrap_or(false))
+    }
+
+    /// `GET /digest` — the latest generated digest. A 404 means the daily
+    /// timer hasn't produced one yet (a normal pre-first-run state, not an
+    /// error) and maps to `Ok(None)` rather than `ClientError`.
+    pub async fn get_digest(&self) -> Result<Option<Digest>, ClientError> {
+        let url = format!("{}/digest", self.config.base_url.trim_end_matches('/'));
+        let response = self.http.get(url).bearer_auth(&self.config.api_token).send().await?;
+
+        if response.status().as_u16() == 401 {
+            return Err(ClientError::Unauthorized);
+        }
+        if response.status().as_u16() == 404 {
+            return Ok(None);
+        }
+        let digest = response.error_for_status()?.json::<Digest>().await?;
+        Ok(Some(digest))
     }
 }
 
@@ -318,5 +335,79 @@ mod tests {
         let result = client_for(&server).delete_skill_alias("rag").await;
 
         assert!(matches!(result, Err(ClientError::Unauthorized)));
+    }
+
+    #[tokio::test]
+    async fn get_digest_returns_parsed_digest() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/digest"))
+            .and(header("Authorization", "Bearer test-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "id": 1,
+                "created_at": "2026-08-05T08:00:00+00:00",
+                "window_start": "2026-07-29T08:00:00+00:00",
+                "window_end": "2026-08-05T08:00:00+00:00",
+                "window_days": 7,
+                "model": "claude-haiku-4-5",
+                "fiche_count": 12,
+                "metrics": {"fiche_count": 12},
+                "trend": {"delta": null},
+                "summary_short": "Tout va bien.",
+                "content": "## Résumé exécutif\n..."
+            })))
+            .mount(&server)
+            .await;
+
+        let digest = client_for(&server).get_digest().await.unwrap();
+
+        let digest = digest.expect("expected Some(Digest)");
+        assert_eq!(digest.id, 1);
+        assert_eq!(digest.fiche_count, 12);
+        assert_eq!(digest.model, "claude-haiku-4-5");
+        assert_eq!(digest.summary_short, "Tout va bien.");
+        assert_eq!(digest.content, "## Résumé exécutif\n...");
+    }
+
+    #[tokio::test]
+    async fn get_digest_maps_404_to_none() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/digest"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let digest = client_for(&server).get_digest().await.unwrap();
+
+        assert!(digest.is_none());
+    }
+
+    #[tokio::test]
+    async fn get_digest_maps_401_to_unauthorized() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/digest"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let result = client_for(&server).get_digest().await;
+
+        assert!(matches!(result, Err(ClientError::Unauthorized)));
+    }
+
+    #[tokio::test]
+    async fn get_digest_surfaces_other_http_errors() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/digest"))
+            .respond_with(ResponseTemplate::new(503))
+            .mount(&server)
+            .await;
+
+        let result = client_for(&server).get_digest().await;
+
+        assert!(matches!(result, Err(ClientError::Request(_))));
     }
 }

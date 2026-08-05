@@ -8,7 +8,7 @@
 use std::time::Duration;
 
 use malt_radar_client::AggregatorClient;
-use malt_radar_core::{Fiche, SkillAlias};
+use malt_radar_core::{Digest, Fiche, SkillAlias};
 use tokio::sync::mpsc;
 
 pub const REFRESH_INTERVAL: Duration = Duration::from_secs(60);
@@ -26,6 +26,10 @@ pub enum FetchOutcome {
     AliasesOk(Vec<SkillAlias>),
     AliasWriteErr(String),
     FicheDeleteErr(String),
+    /// `Some(digest)` once the daily job has run at least once, `None`
+    /// before its first run — both are a successful `GET /digest` result
+    /// (see `AggregatorClient::get_digest`), not an error.
+    DigestOk(Option<Digest>),
 }
 
 /// Sent to `alias_write_loop`. Both variants use the *cascade* pattern:
@@ -76,6 +80,16 @@ pub async fn fetch_loop(
         // a missing endpoint into a fully blank dashboard.
         if let Ok(aliases) = client.list_skill_aliases().await {
             if outcome_tx.send(FetchOutcome::AliasesOk(aliases)).is_err() {
+                break;
+            }
+        }
+
+        // Same best-effort reasoning as the aliases fetch above — an error
+        // (endpoint not yet deployed, network blip) just leaves the last
+        // digest on screen rather than blanking it. `Ok(None)` (no digest
+        // generated yet) is a real, successful result and does get sent.
+        if let Ok(digest) = client.get_digest().await {
+            if outcome_tx.send(FetchOutcome::DigestOk(digest)).is_err() {
                 break;
             }
         }

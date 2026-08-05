@@ -34,5 +34,8 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             dashboard::draw_dashboard(frame, app);
             overlay::draw_help_overlay(frame);
         }
+        Mode::DigestFull => {
+            dashboard::draw_digest_full(frame, app.digest.as_ref(), app.digest_full_scroll)
+        }
     }
 }

@@ -60,7 +60,20 @@
       "Bash(pip show *)",
       "Skill(claude-api)",
       "Bash(.venv/bin/pip show *)",
-      "Bash(FICHES_DIR_OVERRIDE=/tmp/claude-1000/-home-dsylvain-projects-malt-radar/5f1ae58d-8ce0-4c75-afd6-ca975cadce19/scratchpad/smoke_fiches AGGREGATOR_DB_PATH=/tmp/claude-1000/-home-dsylvain-projects-malt-radar/5f1ae58d-8ce0-4c75-afd6-ca975cadce19/scratchpad/smoke_db.sqlite .venv/bin/python3 -c ' *)"
+      "Bash(FICHES_DIR_OVERRIDE=/tmp/claude-1000/-home-dsylvain-projects-malt-radar/5f1ae58d-8ce0-4c75-afd6-ca975cadce19/scratchpad/smoke_fiches AGGREGATOR_DB_PATH=/tmp/claude-1000/-home-dsylvain-projects-malt-radar/5f1ae58d-8ce0-4c75-afd6-ca975cadce19/scratchpad/smoke_db.sqlite .venv/bin/python3 -c ' *)",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\"; cat {}')",
+      "Bash(cargo check *)",
+      "Bash(AGGREGATOR_DB_PATH=data/malt_radar_smoke.db AGGREGATOR_API_TOKEN=smoke-token AGGREGATOR_HOST=127.0.0.1:8991 nohup .venv/bin/python3 -m malt_radar_aggregator.server)",
+      "Bash(disown)",
+      "Bash(AGGREGATOR_DB_PATH=data/malt_radar_smoke.db AGGREGATOR_API_TOKEN=smoke-token AGGREGATOR_HOST=127.0.0.1 AGGREGATOR_PORT=8991 nohup .venv/bin/python3 -m malt_radar_aggregator.server)",
+      "Bash(timeout 10 bash -c 'until tmux capture-pane -t maltradar -p | grep -q \"DAILY AI STRATEGY\"; do sleep 0.3; done')",
+      "Bash(timeout 10 bash -c 'until tmux capture-pane -t maltradar -p | grep -q \"Résumé exécutif\"; do sleep 0.3; done')",
+      "Bash(kill %1)",
+      "Bash(pkill -f \"malt_radar_aggregator.server\")",
+      "Bash(rm -rf data)",
+      "Bash(rm -f .env)",
+      "Bash(python -m pytest tests/test_digest.py -q)",
+      "Bash(.venv/bin/pytest tests/test_digest.py -q)"
     ]
   }
 }

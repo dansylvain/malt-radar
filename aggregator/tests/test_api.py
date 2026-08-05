@@ -305,6 +305,7 @@ def make_digest_kwargs(**overrides) -> dict:
         fiche_count=3,
         metrics={"fiche_count": 3},
         trend={"delta": None},
+        summary_short="Résumé court.",
         content="## Résumé exécutif\n...",
     )
     defaults.update(overrides)
@@ -331,6 +332,7 @@ def test_get_digest_returns_latest_with_parsed_metrics(conn, client):
     assert response.status_code == 200
     body = response.json()
     assert body["content"] == "## Résumé exécutif\n..."
+    assert body["summary_short"] == "Résumé court."
     assert body["metrics"] == {"fiche_count": 3}
     assert body["trend"] == {"delta": None}
 

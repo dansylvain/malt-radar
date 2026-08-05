@@ -71,6 +71,36 @@ pub struct SkillAlias {
     pub canonical: String,
 }
 
+/// A generated strategic digest, as returned by the aggregator's
+/// `GET /digest` (latest) / `GET /digests` (history) —
+/// `aggregator/src/malt_radar_aggregator/digest.py`. `metrics`/`trend`
+/// (the aggregated numbers the Claude prompt was built from) aren't
+/// modeled here: the TUI already computes its own `MarketMetrics`/
+/// `TjmTrend` client-side from the raw fiche list, so this only needs
+/// `summary_short`/`content` (the narrative text) plus enough metadata to
+/// label it. Claude is asked (via a forced `emit_digest` tool call, not a
+/// text delimiter) to produce both a compact panel summary and the full
+/// 5-section Markdown in one response — see `summary_short`'s doc comment.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct Digest {
+    pub id: i64,
+    pub created_at: String,
+    pub window_start: String,
+    pub window_end: String,
+    pub window_days: i64,
+    pub model: String,
+    pub fiche_count: i64,
+    /// Plain-text, ~5 sentences, sized for the compact Digest panel
+    /// (`DIGEST_PANEL_HEIGHT` in `ui/dashboard.rs`) — never Markdown, unlike
+    /// `content`. Falls back to a slice of `content` server-side for
+    /// digests generated before this field existed (see aggregator's
+    /// `_row_to_digest`), so it's never empty for an existing digest.
+    pub summary_short: String,
+    /// Full 5-section Markdown digest, shown in the dedicated full-screen
+    /// view (`Mode::DigestFull`) rather than the dashboard panel.
+    pub content: String,
+}
+
 /// Strips whitespace/punctuation noise, preserving casing — mirrors the
 /// worker's `_clean` (`worker/src/malt_radar_worker/skills.py`). Casing
 /// isn't folded here: that's what the alias-map lookup in `resolve_skill`

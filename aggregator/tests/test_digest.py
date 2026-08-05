@@ -7,16 +7,23 @@ from malt_radar_aggregator import digest
 NOW_ISO = datetime.now(timezone.utc).isoformat()
 
 
-class FakeTextBlock:
-    type = "text"
+class FakeToolUseBlock:
+    type = "tool_use"
 
-    def __init__(self, text: str):
-        self.text = text
+    def __init__(self, name: str, input: dict):
+        self.name = name
+        self.input = input
 
 
 class FakeResponse:
-    def __init__(self, text: str = "## Résumé exécutif\n...", stop_reason: str = "end_turn"):
-        self.content = [FakeTextBlock(text)]
+    def __init__(
+        self,
+        summary_short: str = "Tout va bien.",
+        content_full: str = "## Résumé exécutif\n...",
+        stop_reason: str = "end_turn",
+        tool_name: str = "emit_digest",
+    ):
+        self.content = [FakeToolUseBlock(tool_name, {"summary_short": summary_short, "content_full": content_full})]
         self.stop_reason = stop_reason
 
 
@@ -71,15 +78,40 @@ def test_run_persists_digest_and_returns_it(tmp_path, monkeypatch):
     fiches_dir = tmp_path / "fiches"
     write_fiche(fiches_dir, "free_work_1.md")
     monkeypatch.setattr(digest, "FICHES_DIR", fiches_dir)
-    fake_client = FakeClient(FakeResponse("## Résumé exécutif\nTout va bien."))
+    fake_client = FakeClient(FakeResponse("Résumé court.", "## Résumé exécutif\nTout va bien."))
 
     result = digest.run(window_days=7, client=fake_client)
 
     assert result is not None
     assert result["fiche_count"] == 1
+    assert result["summary_short"] == "Résumé court."
     assert result["content"] == "## Résumé exécutif\nTout va bien."
     assert result["id"] is not None
     assert result["metrics"]["fiche_count"] == 1
+
+
+def test_run_truncates_oversized_summary_short(tmp_path, monkeypatch):
+    fiches_dir = tmp_path / "fiches"
+    write_fiche(fiches_dir, "free_work_1.md")
+    monkeypatch.setattr(digest, "FICHES_DIR", fiches_dir)
+    oversized = "mot " * 200  # well past SUMMARY_SHORT_MAX_CHARS
+    fake_client = FakeClient(FakeResponse(oversized, "## Résumé exécutif\n..."))
+
+    result = digest.run(window_days=7, client=fake_client)
+
+    assert result is not None
+    assert len(result["summary_short"]) <= digest.SUMMARY_SHORT_MAX_CHARS + 1  # +1 for the trailing "…"
+    assert result["summary_short"].endswith("…")
+
+
+def test_run_raises_systemexit_when_tool_call_missing(tmp_path, monkeypatch):
+    fiches_dir = tmp_path / "fiches"
+    write_fiche(fiches_dir, "free_work_1.md")
+    monkeypatch.setattr(digest, "FICHES_DIR", fiches_dir)
+    fake_client = FakeClient(FakeResponse(tool_name="some_other_tool"))
+
+    with pytest.raises(SystemExit):
+        digest.run(window_days=7, client=fake_client)
 
 
 def test_run_returns_none_and_skips_api_call_when_window_empty(tmp_path, monkeypatch):

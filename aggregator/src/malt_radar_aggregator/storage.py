@@ -42,6 +42,16 @@ CREATE TABLE IF NOT EXISTS digests (
 );
 """
 
+# Added after the initial release, same rationale/pattern as
+# `malt_radar_ingestion.storage._MIGRATION_COLUMNS`: ALTER TABLE in place so
+# an already-deployed digests table on the VPS picks it up without a fresh
+# database. Nullable (no NOT NULL/DEFAULT) since pre-migration rows have no
+# short summary — `_row_to_digest` falls back to a slice of `content` for
+# those.
+_DIGESTS_MIGRATION_COLUMNS = {
+    "summary_short": "TEXT",
+}
+
 _UPSERT_SQL = """
 INSERT INTO skill_aliases (alias_key, canonical, updated_at)
 VALUES (?, ?, ?)
@@ -80,8 +90,16 @@ def list_skill_aliases(conn: sqlite3.Connection) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def _migrate_digests(conn: sqlite3.Connection) -> None:
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(digests)")}
+    for column, ddl_type in _DIGESTS_MIGRATION_COLUMNS.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE digests ADD COLUMN {column} {ddl_type}")
+
+
 def init_digests_table(conn: sqlite3.Connection) -> None:
     conn.execute(DIGESTS_SCHEMA)
+    _migrate_digests(conn)
     conn.commit()
 
 
@@ -95,6 +113,7 @@ def save_digest(
     fiche_count: int,
     metrics: dict,
     trend: dict,
+    summary_short: str,
     content: str,
 ) -> dict:
     created_at = datetime.now(timezone.utc).isoformat()
@@ -103,10 +122,22 @@ def save_digest(
     cursor = conn.execute(
         """
         INSERT INTO digests
-            (created_at, window_start, window_end, window_days, model, fiche_count, metrics_json, trend_json, content)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (created_at, window_start, window_end, window_days, model, fiche_count, metrics_json, trend_json,
+             summary_short, content)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (created_at, window_start, window_end, window_days, model, fiche_count, metrics_json, trend_json, content),
+        (
+            created_at,
+            window_start,
+            window_end,
+            window_days,
+            model,
+            fiche_count,
+            metrics_json,
+            trend_json,
+            summary_short,
+            content,
+        ),
     )
     conn.commit()
     return {
@@ -119,6 +150,7 @@ def save_digest(
         "fiche_count": fiche_count,
         "metrics": metrics,
         "trend": trend,
+        "summary_short": summary_short,
         "content": content,
     }
 
@@ -127,6 +159,11 @@ def _row_to_digest(row: sqlite3.Row) -> dict:
     digest = dict(row)
     digest["metrics"] = json.loads(digest.pop("metrics_json"))
     digest["trend"] = json.loads(digest.pop("trend_json"))
+    # Pre-migration rows (see `_DIGESTS_MIGRATION_COLUMNS`) have no stored
+    # short summary — fall back to a slice of the full content rather than
+    # surfacing an empty panel.
+    if not digest.get("summary_short"):
+        digest["summary_short"] = digest["content"][:280]
     return digest
 
 
