@@ -56,7 +56,11 @@
       "Bash(tmux has-session *)",
       "Bash(make test-tui *)",
       "Bash(cargo fmt *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(pip show *)",
+      "Skill(claude-api)",
+      "Bash(.venv/bin/pip show *)",
+      "Bash(FICHES_DIR_OVERRIDE=/tmp/claude-1000/-home-dsylvain-projects-malt-radar/5f1ae58d-8ce0-4c75-afd6-ca975cadce19/scratchpad/smoke_fiches AGGREGATOR_DB_PATH=/tmp/claude-1000/-home-dsylvain-projects-malt-radar/5f1ae58d-8ce0-4c75-afd6-ca975cadce19/scratchpad/smoke_db.sqlite .venv/bin/python3 -c ' *)"
     ]
   }
 }

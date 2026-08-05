@@ -2,8 +2,12 @@ import sqlite3
 
 from malt_radar_aggregator.storage import (
     delete_skill_alias,
+    get_latest_digest,
+    init_digests_table,
     init_skill_aliases_table,
+    list_digests,
     list_skill_aliases,
+    save_digest,
     upsert_skill_alias,
 )
 
@@ -12,6 +16,27 @@ def conn() -> sqlite3.Connection:
     c = sqlite3.connect(":memory:")
     init_skill_aliases_table(c)
     return c
+
+
+def digests_conn() -> sqlite3.Connection:
+    c = sqlite3.connect(":memory:")
+    init_digests_table(c)
+    return c
+
+
+def make_digest_kwargs(**overrides) -> dict:
+    defaults = dict(
+        window_start="2026-07-29T00:00:00+00:00",
+        window_end="2026-08-05T00:00:00+00:00",
+        window_days=7,
+        model="claude-haiku-4-5",
+        fiche_count=12,
+        metrics={"fiche_count": 12, "tjm": {"median": 500}},
+        trend={"delta": None},
+        content="## Résumé exécutif\n...",
+    )
+    defaults.update(overrides)
+    return defaults
 
 
 def test_upsert_inserts_new_alias():
@@ -68,3 +93,43 @@ def test_list_returns_all_aliases_alphabetically():
 
     assert [a["alias_key"] for a in aliases] == ["powerbi", "rag systems"]
     assert aliases[0]["canonical"] == "Power BI"
+
+
+def test_save_digest_and_get_latest_round_trip():
+    c = digests_conn()
+
+    saved = save_digest(c, **make_digest_kwargs())
+
+    assert saved["id"] is not None
+    assert saved["metrics"] == make_digest_kwargs()["metrics"]
+    assert saved["trend"] == make_digest_kwargs()["trend"]
+
+    latest = get_latest_digest(c)
+    assert latest == saved
+
+
+def test_get_latest_digest_returns_none_on_empty_table():
+    c = digests_conn()
+
+    assert get_latest_digest(c) is None
+
+
+def test_list_digests_orders_newest_first_and_respects_limit():
+    c = digests_conn()
+    for i in range(3):
+        save_digest(c, **make_digest_kwargs(fiche_count=i))
+
+    digests = list_digests(c, limit=2)
+
+    assert len(digests) == 2
+    assert [d["fiche_count"] for d in digests] == [2, 1]
+
+
+def test_list_digests_parses_metrics_and_trend_not_raw_json():
+    c = digests_conn()
+    save_digest(c, **make_digest_kwargs())
+
+    digests = list_digests(c)
+
+    assert isinstance(digests[0]["metrics"], dict)
+    assert isinstance(digests[0]["trend"], dict)

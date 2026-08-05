@@ -54,8 +54,11 @@ Toute nouvelle source doit être validée (robots.txt + CGU) et ajoutée à
 2. **Traitement** (Raspberry Pi 5, Ollama/Qwen 2.5 3B, via Tailscale) —
    extraction d'entités structurées (TJM, stack, durée, catégorie) → fiches
    Markdown avec frontmatter YAML.
-3. **Synthèse** (VPS + API Claude) — agrégation hebdomadaire, métriques,
-   digest stratégique généré par Claude (usage hebdo, jamais par fiche).
+3. **Synthèse** (VPS + API Claude) — agrégation quotidienne (fenêtre
+   glissante de 7 jours), métriques, digest stratégique généré par Claude
+   (un appel/jour, jamais par fiche — avec `claude-haiku-4-5` le coût
+   d'un appel quotidien est négligeable, ~0,10-0,15 $/mois, donc c'est le
+   volume de données par fenêtre qui dicte la cadence, plus le coût).
 4. **Restitution** (Rust/Ratatui, poste de travail) — TUI qui interroge
    l'API du cluster.
 
@@ -66,8 +69,9 @@ Toute nouvelle source doit être validée (robots.txt + CGU) et ajoutée à
   encore implémenté), SQLite.
 - Traitement : Ollama (Qwen 2.5 3B), JSON Schema strict avec validation +
   retry.
-- Synthèse : API Claude, appelée uniquement pour la synthèse hebdomadaire
-  (pas par annonce individuelle — maîtrise du coût).
+- Synthèse : API Claude (`claude-haiku-4-5` par défaut, configurable via
+  `DIGEST_MODEL`), appelée une fois par jour sur une fenêtre glissante de
+  7 jours — jamais par annonce individuelle.
 - TUI : Rust, Ratatui, Tokio, Reqwest, Crossterm.
 - Réseau : Tailscale entre VPS / Pi5 / poste de travail, pas de ports
   exposés publiquement.
@@ -86,10 +90,11 @@ un dossier à la racine, déployé/exécuté sur une seule machine du cluster.
   `ROADMAP.md` Phase 2). **Existe déjà** (Phase 2, code complet —
   déploiement Pi5 restant).
 - `aggregator/` — VPS, API HTTP pull/push consommée par `worker/` (amorcé
-  en Phase 2) ; la synthèse hebdomadaire + appel API Claude viendront s'y
-  greffer en Phase 3. Dépend de `ingestion/` (réutilise `storage.py` en
-  éditable local plutôt que de dupliquer le schéma SQLite). **Existe
-  déjà** (squelette Phase 2 — déploiement VPS restant).
+  en Phase 2) ; la synthèse quotidienne + appel API Claude (Phase 3, code
+  complet côté `digest.py`) s'y greffent. Dépend de `ingestion/` (réutilise
+  `storage.py` en éditable local plutôt que de dupliquer le schéma
+  SQLite). **Existe déjà** (Phase 2 + Phase 3 code complet — timer
+  systemd et `.env` restants côté Dan).
 - `tui/` — Rust workspace (Ratatui/Tokio), poste de travail/WSL2. Client
   HTTP pur vers `aggregator/` (jamais d'accès direct DB/filesystem
   cluster). **Existe déjà** (Phase 4, scaffold complet — connexion au

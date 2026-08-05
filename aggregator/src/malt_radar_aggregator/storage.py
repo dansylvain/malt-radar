@@ -15,6 +15,7 @@ every fiche that ever used the raw string, no backfill needed.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -23,6 +24,21 @@ CREATE TABLE IF NOT EXISTS skill_aliases (
     alias_key TEXT PRIMARY KEY,
     canonical TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+"""
+
+DIGESTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS digests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    window_start TEXT NOT NULL,
+    window_end TEXT NOT NULL,
+    window_days INTEGER NOT NULL,
+    model TEXT NOT NULL,
+    fiche_count INTEGER NOT NULL,
+    metrics_json TEXT NOT NULL,
+    trend_json TEXT NOT NULL,
+    content TEXT NOT NULL
 );
 """
 
@@ -62,3 +78,69 @@ def list_skill_aliases(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute("SELECT alias_key, canonical, updated_at FROM skill_aliases ORDER BY alias_key").fetchall()
     conn.row_factory = None
     return [dict(row) for row in rows]
+
+
+def init_digests_table(conn: sqlite3.Connection) -> None:
+    conn.execute(DIGESTS_SCHEMA)
+    conn.commit()
+
+
+def save_digest(
+    conn: sqlite3.Connection,
+    *,
+    window_start: str,
+    window_end: str,
+    window_days: int,
+    model: str,
+    fiche_count: int,
+    metrics: dict,
+    trend: dict,
+    content: str,
+) -> dict:
+    created_at = datetime.now(timezone.utc).isoformat()
+    metrics_json = json.dumps(metrics)
+    trend_json = json.dumps(trend)
+    cursor = conn.execute(
+        """
+        INSERT INTO digests
+            (created_at, window_start, window_end, window_days, model, fiche_count, metrics_json, trend_json, content)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (created_at, window_start, window_end, window_days, model, fiche_count, metrics_json, trend_json, content),
+    )
+    conn.commit()
+    return {
+        "id": cursor.lastrowid,
+        "created_at": created_at,
+        "window_start": window_start,
+        "window_end": window_end,
+        "window_days": window_days,
+        "model": model,
+        "fiche_count": fiche_count,
+        "metrics": metrics,
+        "trend": trend,
+        "content": content,
+    }
+
+
+def _row_to_digest(row: sqlite3.Row) -> dict:
+    digest = dict(row)
+    digest["metrics"] = json.loads(digest.pop("metrics_json"))
+    digest["trend"] = json.loads(digest.pop("trend_json"))
+    return digest
+
+
+def get_latest_digest(conn: sqlite3.Connection) -> dict | None:
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM digests ORDER BY id DESC LIMIT 1").fetchone()
+    conn.row_factory = None
+    if row is None:
+        return None
+    return _row_to_digest(row)
+
+
+def list_digests(conn: sqlite3.Connection, limit: int = 20) -> list[dict]:
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT * FROM digests ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    conn.row_factory = None
+    return [_row_to_digest(row) for row in rows]

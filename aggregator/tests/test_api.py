@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from malt_radar_aggregator import api
-from malt_radar_aggregator.storage import init_skill_aliases_table
+from malt_radar_aggregator.storage import init_digests_table, init_skill_aliases_table, save_digest
 from malt_radar_ingestion.models import Mission
 from malt_radar_ingestion.storage import init_db, upsert_missions
 
@@ -43,6 +43,7 @@ def conn():
     # (get_conn() only runs it lazily on the first real request).
     c = init_db(":memory:")
     init_skill_aliases_table(c)
+    init_digests_table(c)
     return c
 
 
@@ -293,6 +294,63 @@ def test_delete_skill_alias_missing_query_param_returns_422(client):
     response = client.delete("/skill-aliases", headers=auth_headers())
 
     assert response.status_code == 422
+
+
+def make_digest_kwargs(**overrides) -> dict:
+    defaults = dict(
+        window_start="2026-07-29T00:00:00+00:00",
+        window_end="2026-08-05T00:00:00+00:00",
+        window_days=7,
+        model="claude-haiku-4-5",
+        fiche_count=3,
+        metrics={"fiche_count": 3},
+        trend={"delta": None},
+        content="## Résumé exécutif\n...",
+    )
+    defaults.update(overrides)
+    return defaults
+
+
+def test_get_digest_requires_token(client):
+    response = client.get("/digest")
+
+    assert response.status_code == 401
+
+
+def test_get_digest_returns_404_when_none_generated(client):
+    response = client.get("/digest", headers=auth_headers())
+
+    assert response.status_code == 404
+
+
+def test_get_digest_returns_latest_with_parsed_metrics(conn, client):
+    save_digest(conn, **make_digest_kwargs())
+
+    response = client.get("/digest", headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["content"] == "## Résumé exécutif\n..."
+    assert body["metrics"] == {"fiche_count": 3}
+    assert body["trend"] == {"delta": None}
+
+
+def test_get_digests_requires_token(client):
+    response = client.get("/digests")
+
+    assert response.status_code == 401
+
+
+def test_get_digests_returns_history_ordered_and_limited(conn, client):
+    for i in range(3):
+        save_digest(conn, **make_digest_kwargs(fiche_count=i))
+
+    response = client.get("/digests", params={"limit": 2}, headers=auth_headers())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 2
+    assert [d["fiche_count"] for d in body] == [2, 1]
 
 
 def test_missing_server_token_config_returns_503(conn, tmp_path, monkeypatch):

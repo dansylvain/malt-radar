@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily trigger for malt-radar-digest.service
+
+[Timer]
+# After worker's 07:00 UTC run (+ up to 30min jitter), so the day's fiches
+# are on disk before the digest computes its metrics.
+OnCalendar=*-*-* 08:00:00 UTC
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

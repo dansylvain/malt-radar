@@ -1,0 +1,11 @@
+[Unit]
+Description=Malt-Radar daily strategic digest (Claude API synthesis)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=dan
+WorkingDirectory=/home/dan/malt-radar/aggregator
+EnvironmentFile=/home/dan/malt-radar/aggregator/.env
+ExecStart=/home/dan/malt-radar/aggregator/.venv/bin/python -m malt_radar_aggregator.digest

@@ -21,6 +21,9 @@ the read side consumed by the Phase 4 TUI.
   time, so editing an alias here instantly corrects every fiche that ever
   used that raw string, no backfill. Edited live from the TUI's Skill
   Audit view.
+- GET /digest / GET /digests — the persisted history of Claude-generated
+  strategic digests (see digest.py), written by the daily systemd timer,
+  not this API. Read-only.
 
 See ROADMAP.md (Phase 2/4) and CLAUDE.md's network section — this API is
 reached only over Tailscale, never a public port (see server.py).
@@ -33,22 +36,23 @@ import re
 import sqlite3
 from pathlib import Path
 
-import yaml
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from malt_radar_aggregator.auth import require_token
+from malt_radar_aggregator.fiches import FICHES_DIR, list_fiches as _list_fiches
 from malt_radar_aggregator.storage import (
     delete_skill_alias,
+    get_latest_digest,
+    init_digests_table,
     init_skill_aliases_table,
+    list_digests,
     list_skill_aliases,
     upsert_skill_alias,
 )
 from malt_radar_ingestion.storage import DEFAULT_DB_PATH, fetch_unprocessed, get_mission, init_db, mark_processed
 
-FICHES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "fiches"
 _SAFE_CHARS = re.compile(r"[^a-zA-Z0-9_-]+")
-_FRONTMATTER_RE = re.compile(r"\A---\n(.*?\n)---\n", re.DOTALL)
 
 app = FastAPI(title="malt-radar-aggregator")
 
@@ -66,6 +70,7 @@ def get_conn() -> sqlite3.Connection:
         db_path = os.environ.get("AGGREGATOR_DB_PATH", str(DEFAULT_DB_PATH))
         _conn = init_db(db_path)
         init_skill_aliases_table(_conn)
+        init_digests_table(_conn)
     return _conn
 
 
@@ -113,34 +118,12 @@ def submit_fiche(
     return {"mission_id": payload.mission_id, "filename": filename}
 
 
-def _read_fiche(path: Path) -> dict | None:
-    """Parse a fiche's YAML frontmatter. Returns None if the file doesn't
-    start with a well-formed `---`-delimited block (skipped rather than
-    failing the whole listing — one bad file shouldn't blank the TUI)."""
-    match = _FRONTMATTER_RE.match(path.read_text(encoding="utf-8"))
-    if match is None:
-        return None
-    frontmatter = yaml.safe_load(match.group(1))
-    if not isinstance(frontmatter, dict):
-        return None
-    frontmatter["filename"] = path.name
-    return frontmatter
-
-
 @app.get("/fiches")
 def list_fiches(
     limit: int = 100,
     _token: None = Depends(require_token),
 ) -> list[dict]:
-    if not FICHES_DIR.exists():
-        return []
-    paths = sorted(FICHES_DIR.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
-    fiches = []
-    for path in paths[:limit]:
-        fiche = _read_fiche(path)
-        if fiche is not None:
-            fiches.append(fiche)
-    return fiches
+    return _list_fiches(FICHES_DIR, limit=limit)
 
 
 def _resolve_fiche_path(filename: str) -> Path:
@@ -201,3 +184,23 @@ def delete_alias(
     # `alias` as a required query param, not a path segment: skill strings
     # can contain "/" (e.g. "CI/CD"), which would break path routing.
     return {"alias_key": alias.strip().lower(), "deleted": delete_skill_alias(conn, alias)}
+
+
+@app.get("/digest")
+def get_digest(
+    conn: sqlite3.Connection = Depends(get_conn),
+    _token: None = Depends(require_token),
+) -> dict:
+    digest = get_latest_digest(conn)
+    if digest is None:
+        raise HTTPException(status_code=404, detail="No digest has been generated yet")
+    return digest
+
+
+@app.get("/digests")
+def list_digests_endpoint(
+    limit: int = 20,
+    conn: sqlite3.Connection = Depends(get_conn),
+    _token: None = Depends(require_token),
+) -> list[dict]:
+    return list_digests(conn, limit=limit)

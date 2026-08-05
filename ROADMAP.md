@@ -96,12 +96,38 @@ Décisions d'architecture (2026-08-03) :
 ## Phase 3 — Synthèse (VPS + API Claude)
 - ✅ `aggregator/` existe déjà (amorcé en Phase 2) avec l'API HTTP
   pull/push ; cette phase l'étend, ne repart pas de zéro.
-- Agrégation hebdomadaire des fiches Markdown.
-- Calcul des métriques (TJM moyen par stack, fréquence des compétences,
-  évolution semaine/semaine).
-- Appel Claude API pour le digest stratégique — usage hebdo, jamais par
-  fiche individuelle (maîtrise du coût).
-- Exposition des résultats via une API locale consommée par le TUI.
+- ✅ **Amendement (2026-08-05)** : cadence **quotidienne**, pas
+  hebdomadaire comme envisagé initialement — fenêtre glissante de 7 jours
+  recalculée chaque jour (vs. semaine précédente), pas juste "depuis
+  hier". Avec `claude-haiku-4-5`, un appel quotidien avec un contexte de
+  métriques synthétisées coûte ~0,10-0,15 $/mois (~1,5-2,2K tokens
+  d'entrée, ~400-700 en sortie) — négligeable, donc le coût ne dicte plus
+  la cadence. La fenêtre glissante de 7 jours compense le risque de
+  volume quotidien faible (2 sources : Free-Work + France Travail).
+- ✅ Agrégation des fiches Markdown : `aggregator/src/malt_radar_aggregator/
+  metrics.py` (`filter_window`, `compute_metrics`, `compute_trend` —
+  TJM médian/quartiles R-7, fréquence des compétences avec bucket
+  "Autres", tendance TJM médian fenêtre courante vs. précédente avec
+  seuil d'échantillon minimum). Conventions statistiques alignées sur
+  `tui/core/src/lib.rs` (même corpus de fiches, même raisonnement,
+  deuxième consommateur).
+- ✅ Appel Claude API pour le digest stratégique —
+  `aggregator/src/malt_radar_aggregator/digest.py`
+  (`python -m malt_radar_aggregator.digest`, déclenché par
+  `aggregator/deploy/malt-radar-digest.timer`). Jamais par fiche
+  individuelle — seules des métriques déjà agrégées atteignent le
+  prompt (jamais titre/entreprise/url d'une annonce individuelle),
+  ce qui est aussi le point d'application de la contrainte de licence
+  France Travail (voir `SOURCES.md`). Persistance dans une table SQLite
+  `digests` (historique complet, pas juste stdout).
+- ✅ Exposition des résultats via l'API locale : `GET /digest` (dernier)
+  et `GET /digests?limit=` (historique), même auth `AGGREGATOR_API_TOKEN`
+  que le reste de l'API — consommable par la Phase 4 du TUI (panneau
+  Digest, actuellement un placeholder).
+- ⬜ **Reste à faire par Dan** : sur le VPS, remplir les 3 nouvelles
+  variables dans `aggregator/.env` (`ANTHROPIC_API_KEY`, `DIGEST_MODEL`,
+  `DIGEST_WINDOW_DAYS`), installer `aggregator/deploy/malt-radar-digest.
+  service`/`.timer` et `systemctl enable --now malt-radar-digest.timer`.
 
 ## Phase 4 — Dashboard TUI (Rust/Ratatui, poste de travail/WSL2)
 - ✅ **Amendement (2026-08-04)** : `GET /fiches` ajouté à `aggregator/`
