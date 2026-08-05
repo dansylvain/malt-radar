@@ -54,7 +54,7 @@ pub fn draw_fiche_detail(frame: &mut Frame, app: &App) {
         Line::from(format!("TJM         {tjm}")),
         Line::from(format!("Durée       {duree}")),
         Line::from(format!("Niveau      {}", fiche.niveau.as_deref().unwrap_or("n/a"))),
-        Line::from(format!("Catégorie   {}", fiche.categorie.as_deref().unwrap_or("n/a"))),
+//        Line::from(format!("Catégorie   {}", fiche.categorie.as_deref().unwrap_or("n/a"))),
         Line::from(format!("Stack       {stack}")),
         Line::from(format!("Source      {source_line}")),
         Line::from(separator),
