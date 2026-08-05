@@ -463,7 +463,11 @@ pub fn skill_audit(fiches: &[Fiche]) -> Vec<SkillCount> {
             count,
         })
         .collect();
-    result.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.name.cmp(&b.name)));
+    // Alphabetical (case-insensitive), not by count: this view's job is to
+    // let variants of the same skill (e.g. "RAG" / "RAG Systems") land next
+    // to each other so they're easy to spot and alias — a count-first sort
+    // scatters them across the list instead.
+    result.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.name.cmp(&b.name)));
     result
 }
 
@@ -712,12 +716,26 @@ mod tests {
     }
 
     #[test]
-    fn skill_audit_breaks_count_ties_alphabetically() {
-        let fiches = vec![fiche(&["C", "A", "B"], None, None)];
+    fn skill_audit_sorts_alphabetically_regardless_of_count() {
+        let fiches = vec![
+            fiche(&["C"], None, None),
+            fiche(&["C"], None, None),
+            fiche(&["A"], None, None),
+            fiche(&["B"], None, None),
+        ];
 
         let audit = skill_audit(&fiches);
 
         assert_eq!(audit.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["A", "B", "C"]);
+    }
+
+    #[test]
+    fn skill_audit_sorts_case_insensitively() {
+        let fiches = vec![fiche(&["rust", "Python", "aws"], None, None)];
+
+        let audit = skill_audit(&fiches);
+
+        assert_eq!(audit.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["aws", "Python", "rust"]);
     }
 
     #[test]
