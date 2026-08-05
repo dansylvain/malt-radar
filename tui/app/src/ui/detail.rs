@@ -70,7 +70,9 @@ pub fn draw_fiche_detail(frame: &mut Frame, app: &App) {
         ratatui::text::Span::styled("[o]", bold()),
         ratatui::text::Span::raw(" ouvrir  "),
         ratatui::text::Span::styled("[↑/↓]", bold()),
-        ratatui::text::Span::raw(" défiler"),
+        ratatui::text::Span::raw(" défiler  "),
+        ratatui::text::Span::styled("[d]", bold()),
+        ratatui::text::Span::raw(" supprimer"),
     ]));
 
     let block = Block::default()

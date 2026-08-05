@@ -71,6 +71,20 @@ impl AggregatorClient {
         Ok(fiches)
     }
 
+    /// `DELETE /fiches/{filename}` — unlike `delete_skill_alias`, `filename`
+    /// is a path segment, not a query param: it's server-derived
+    /// (`_fiche_filename`) and never contains `/`, so path routing is safe.
+    pub async fn delete_fiche(&self, filename: &str) -> Result<bool, ClientError> {
+        let url = format!("{}/fiches/{}", self.config.base_url.trim_end_matches('/'), filename);
+        let response = self.http.delete(url).bearer_auth(&self.config.api_token).send().await?;
+
+        if response.status().as_u16() == 401 {
+            return Err(ClientError::Unauthorized);
+        }
+        let body: serde_json::Value = response.error_for_status()?.json().await?;
+        Ok(body.get("deleted").and_then(|v| v.as_bool()).unwrap_or(false))
+    }
+
     /// `GET /skill-aliases` — see `aggregator/README.md`.
     pub async fn list_skill_aliases(&self) -> Result<Vec<SkillAlias>, ClientError> {
         let url = format!("{}/skill-aliases", self.config.base_url.trim_end_matches('/'));
@@ -180,6 +194,35 @@ mod tests {
         let result = client_for(&server).list_fiches(50).await;
 
         assert!(matches!(result, Err(ClientError::Request(_))));
+    }
+
+    #[tokio::test]
+    async fn delete_fiche_sends_filename_as_path_segment() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path("/fiches/free_work_1.md"))
+            .and(header("Authorization", "Bearer test-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"filename": "free_work_1.md", "deleted": true})))
+            .mount(&server)
+            .await;
+
+        let deleted = client_for(&server).delete_fiche("free_work_1.md").await.unwrap();
+
+        assert!(deleted);
+    }
+
+    #[tokio::test]
+    async fn delete_fiche_maps_401_to_unauthorized() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path("/fiches/free_work_1.md"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+
+        let result = client_for(&server).delete_fiche("free_work_1.md").await;
+
+        assert!(matches!(result, Err(ClientError::Unauthorized)));
     }
 
     #[tokio::test]

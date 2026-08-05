@@ -166,6 +166,49 @@ def test_list_fiches_empty_when_dir_missing(client):
     assert response.json() == []
 
 
+def test_delete_fiche_requires_token(client, tmp_path):
+    fiches_dir = tmp_path / "fiches"
+    fiches_dir.mkdir()
+    (fiches_dir / "good.md").write_text("---\ntitle: OK\n---\n\n# OK\n", encoding="utf-8")
+
+    response = client.delete("/fiches/good.md")
+
+    assert response.status_code == 401
+    assert (fiches_dir / "good.md").exists()
+
+
+def test_delete_fiche_removes_file(client, tmp_path):
+    fiches_dir = tmp_path / "fiches"
+    fiches_dir.mkdir()
+    (fiches_dir / "good.md").write_text("---\ntitle: OK\n---\n\n# OK\n", encoding="utf-8")
+
+    response = client.delete("/fiches/good.md", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json() == {"filename": "good.md", "deleted": True}
+    assert not (fiches_dir / "good.md").exists()
+
+
+def test_delete_fiche_missing_reports_false_not_404(client, tmp_path):
+    (tmp_path / "fiches").mkdir()
+
+    response = client.delete("/fiches/does-not-exist.md", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json() == {"filename": "does-not-exist.md", "deleted": False}
+
+
+def test_delete_fiche_rejects_path_traversal(client, tmp_path):
+    outside = tmp_path / "secret.txt"
+    outside.write_text("do not touch", encoding="utf-8")
+    (tmp_path / "fiches").mkdir()
+
+    response = client.delete("/fiches/..%2Fsecret.txt", headers=auth_headers())
+
+    assert response.status_code in (400, 404)
+    assert outside.exists()
+
+
 def test_get_skill_aliases_requires_token(client):
     response = client.get("/skill-aliases")
 

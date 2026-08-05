@@ -10,6 +10,11 @@ the read side consumed by the Phase 4 TUI.
   fiches already generated, as parsed frontmatter. Minimal stand-in until
   Phase 3's weekly aggregation/digest lands — no metrics here, just the
   raw fiche fields.
+- DELETE /fiches/{filename}  — the TUI deletes a single fiche (e.g. a
+  bad extraction) from its detail overlay. `filename` is a path segment
+  but never trusted as a filesystem path directly — see
+  `_resolve_fiche_path`. Idempotent like DELETE /skill-aliases: a missing
+  file reports `deleted: false` rather than 404.
 - GET/PUT/DELETE /skill-aliases — the persisted, editable skill-name
   alias table (raw/cleaned string -> canonical display name). Fiches are
   never mutated; the TUI applies this table to `stack` entries at display
@@ -136,6 +141,36 @@ def list_fiches(
         if fiche is not None:
             fiches.append(fiche)
     return fiches
+
+
+def _resolve_fiche_path(filename: str) -> Path:
+    """Rejects anything that isn't a bare filename inside `FICHES_DIR` —
+    unlike `_fiche_filename` (server-derived, trusted), this one takes a
+    filename back from the client, so `..`/`/`/an absolute path all need
+    to be ruled out before it ever touches the filesystem."""
+    if "/" in filename or "\\" in filename or filename in {".", ".."}:
+        raise HTTPException(status_code=400, detail="invalid filename")
+    path = (FICHES_DIR / filename).resolve()
+    if path.parent != FICHES_DIR.resolve():
+        raise HTTPException(status_code=400, detail="invalid filename")
+    return path
+
+
+@app.delete("/fiches/{filename}")
+def delete_fiche(
+    filename: str,
+    _token: None = Depends(require_token),
+) -> dict:
+    # Never 404s on a missing file — same reasoning as delete_skill_alias:
+    # deleting a fiche that's already gone (e.g. a double `d` press from
+    # the TUI, with no confirmation step in between) is a no-op, not an
+    # error. Only `_resolve_fiche_path` (invalid/unsafe filename) still
+    # raises.
+    path = _resolve_fiche_path(filename)
+    if not path.is_file():
+        return {"filename": filename, "deleted": False}
+    path.unlink()
+    return {"filename": filename, "deleted": True}
 
 
 @app.get("/skill-aliases")

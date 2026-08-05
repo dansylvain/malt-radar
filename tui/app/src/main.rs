@@ -31,7 +31,7 @@ use tokio::sync::mpsc;
 
 use crate::app::App;
 use crate::events::{handle_key, Commands, Flow};
-use crate::tasks::{alias_write_loop, fetch_loop, AliasCommand, FetchOutcome, POLL_INTERVAL};
+use crate::tasks::{alias_write_loop, fetch_loop, fiche_write_loop, AliasCommand, FetchOutcome, FicheCommand, POLL_INTERVAL};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -47,8 +47,10 @@ async fn main() -> anyhow::Result<()> {
     let (refresh_tx, refresh_rx) = mpsc::unbounded_channel::<()>();
     let (outcome_tx, mut outcome_rx) = mpsc::unbounded_channel::<FetchOutcome>();
     let (alias_cmd_tx, alias_cmd_rx) = mpsc::unbounded_channel::<AliasCommand>();
+    let (fiche_cmd_tx, fiche_cmd_rx) = mpsc::unbounded_channel::<FicheCommand>();
     let fetcher = tokio::spawn(fetch_loop(client.clone(), refresh_rx, outcome_tx.clone()));
-    let alias_writer = tokio::spawn(alias_write_loop(client, alias_cmd_rx, outcome_tx));
+    let alias_writer = tokio::spawn(alias_write_loop(client.clone(), alias_cmd_rx, outcome_tx.clone()));
+    let fiche_writer = tokio::spawn(fiche_write_loop(client, fiche_cmd_rx, outcome_tx));
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -60,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
     let commands = Commands {
         refresh_tx: &refresh_tx,
         alias_cmd_tx: &alias_cmd_tx,
+        fiche_cmd_tx: &fiche_cmd_tx,
     };
     let run_result = run(&mut terminal, &mut app, &commands, &mut outcome_rx).await;
 
@@ -69,8 +72,10 @@ async fn main() -> anyhow::Result<()> {
 
     drop(refresh_tx);
     drop(alias_cmd_tx);
+    drop(fiche_cmd_tx);
     let _ = fetcher.await;
     let _ = alias_writer.await;
+    let _ = fiche_writer.await;
 
     run_result
 }

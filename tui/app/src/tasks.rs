@@ -25,6 +25,7 @@ pub enum FetchOutcome {
     Err(String),
     AliasesOk(Vec<SkillAlias>),
     AliasWriteErr(String),
+    FicheDeleteErr(String),
 }
 
 /// Sent to `alias_write_loop`. Both variants use the *cascade* pattern:
@@ -34,6 +35,13 @@ pub enum FetchOutcome {
 pub enum AliasCommand {
     Upsert { alias: String, canonical: String },
     Delete { alias: String },
+}
+
+/// Sent to `fiche_write_loop` — currently just the one operation, from the
+/// fiche detail overlay's `d` key (`App::delete_detail_fiche`).
+#[derive(Debug)]
+pub enum FicheCommand {
+    Delete { filename: String },
 }
 
 pub async fn fetch_loop(
@@ -88,6 +96,27 @@ pub async fn alias_write_loop(
         };
         if let Err(err) = result {
             if outcome_tx.send(FetchOutcome::AliasWriteErr(err.to_string())).is_err() {
+                break;
+            }
+        }
+    }
+}
+
+/// Mirrors `alias_write_loop`: the local state change already happened
+/// optimistically (see `App::delete_detail_fiche`), so this just reports a
+/// failure back if the server-side delete didn't go through — it'll
+/// self-heal on the next periodic refetch.
+pub async fn fiche_write_loop(
+    client: AggregatorClient,
+    mut cmd_rx: mpsc::UnboundedReceiver<FicheCommand>,
+    outcome_tx: mpsc::UnboundedSender<FetchOutcome>,
+) {
+    while let Some(cmd) = cmd_rx.recv().await {
+        let result = match cmd {
+            FicheCommand::Delete { filename } => client.delete_fiche(&filename).await.map(|_| ()),
+        };
+        if let Err(err) = result {
+            if outcome_tx.send(FetchOutcome::FicheDeleteErr(err.to_string())).is_err() {
                 break;
             }
         }

@@ -12,13 +12,14 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tokio::sync::mpsc;
 
 use crate::app::{App, AuditPanel, Focus, Mode};
-use crate::tasks::AliasCommand;
+use crate::tasks::{AliasCommand, FicheCommand};
 
 /// The channels a key handler is allowed to write to. Bundled so handlers
 /// take one argument and can be driven from tests with throwaway channels.
 pub struct Commands<'a> {
     pub refresh_tx: &'a mpsc::UnboundedSender<()>,
     pub alias_cmd_tx: &'a mpsc::UnboundedSender<AliasCommand>,
+    pub fiche_cmd_tx: &'a mpsc::UnboundedSender<FicheCommand>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -42,7 +43,7 @@ pub fn handle_key(app: &mut App, key: KeyEvent, cmds: &Commands) -> Flow {
         Mode::SkillAudit => handle_skill_audit_key(app, key, cmds),
         Mode::AliasEdit => handle_alias_edit_key(app, key, cmds),
         Mode::FeedFilter => handle_feed_filter_key(app, key),
-        Mode::FicheDetail => handle_fiche_detail_key(app, key),
+        Mode::FicheDetail => handle_fiche_detail_key(app, key, cmds),
         Mode::Help => handle_help_key(app, key),
     }
 }
@@ -106,12 +107,14 @@ fn handle_dashboard_key(app: &mut App, key: KeyEvent, cmds: &Commands) -> Flow {
 
 /// Overlay on top of the dashboard: `Esc`/`Enter` close it, `o` opens the
 /// fiche's URL, arrows/`j`/`k` scroll — the content can overflow a small
-/// terminal (a long stack, in particular).
-fn handle_fiche_detail_key(app: &mut App, key: KeyEvent) -> Flow {
+/// terminal (a long stack, in particular) — and `d` deletes the fiche
+/// (e.g. a bad extraction, like an out-of-bounds TJM slipping through).
+fn handle_fiche_detail_key(app: &mut App, key: KeyEvent, cmds: &Commands) -> Flow {
     match key.code {
         KeyCode::Char('q') => return Flow::Quit,
         KeyCode::Esc | KeyCode::Enter => app.close_fiche_detail(),
         KeyCode::Char('o') => app.open_detail_url(),
+        KeyCode::Char('d') => app.delete_detail_fiche(cmds.fiche_cmd_tx),
         KeyCode::Down | KeyCode::Char('j') => app.detail_scroll_down(),
         KeyCode::Up | KeyCode::Char('k') => app.detail_scroll_up(),
         _ => {}
@@ -231,9 +234,11 @@ mod tests {
         app.mode = Mode::FeedFilter;
         let (refresh_tx, mut refresh_rx) = mpsc::unbounded_channel::<()>();
         let (alias_tx, _alias_rx) = mpsc::unbounded_channel::<AliasCommand>();
+        let (fiche_tx, _fiche_rx) = mpsc::unbounded_channel::<FicheCommand>();
         let cmds = Commands {
             refresh_tx: &refresh_tx,
             alias_cmd_tx: &alias_tx,
+            fiche_cmd_tx: &fiche_tx,
         };
 
         for c in ['q', 'r', 'a'] {
@@ -252,9 +257,11 @@ mod tests {
         app.feed.skill_filter = SkillFilter::Named("RAG".to_string());
         let (refresh_tx, _refresh_rx) = mpsc::unbounded_channel::<()>();
         let (alias_tx, _alias_rx) = mpsc::unbounded_channel::<AliasCommand>();
+        let (fiche_tx, _fiche_rx) = mpsc::unbounded_channel::<FicheCommand>();
         let cmds = Commands {
             refresh_tx: &refresh_tx,
             alias_cmd_tx: &alias_tx,
+            fiche_cmd_tx: &fiche_tx,
         };
 
         let first = handle_key(&mut app, key(KeyCode::Esc), &cmds);
@@ -287,14 +294,45 @@ mod tests {
     }
 
     #[test]
+    fn d_in_fiche_detail_removes_the_fiche_and_closes_the_overlay() {
+        let mut app = App::new();
+        app.apply(FetchOutcome::Ok(vec![fiche("a.md"), fiche("b.md")]));
+        app.feed.list_state.select(Some(0));
+        app.open_fiche_detail();
+        assert_eq!(app.mode, Mode::FicheDetail);
+
+        let (refresh_tx, _refresh_rx) = mpsc::unbounded_channel::<()>();
+        let (alias_tx, _alias_rx) = mpsc::unbounded_channel::<AliasCommand>();
+        let (fiche_tx, mut fiche_rx) = mpsc::unbounded_channel::<FicheCommand>();
+        let cmds = Commands {
+            refresh_tx: &refresh_tx,
+            alias_cmd_tx: &alias_tx,
+            fiche_cmd_tx: &fiche_tx,
+        };
+
+        let flow = handle_key(&mut app, key(KeyCode::Char('d')), &cmds);
+
+        assert_eq!(flow, Flow::Continue);
+        assert_eq!(app.mode, Mode::Dashboard);
+        assert!(app.fiches.iter().all(|f| f.filename != "a.md"));
+        assert!(app.fiches.iter().any(|f| f.filename == "b.md"));
+        match fiche_rx.try_recv() {
+            Ok(FicheCommand::Delete { filename }) => assert_eq!(filename, "a.md"),
+            other => panic!("expected a FicheCommand::Delete for a.md, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn tab_toggles_focus_between_top_skills_and_live_feed() {
         let mut app = App::new();
         assert_eq!(app.focus, Focus::LiveFeed);
         let (refresh_tx, _refresh_rx) = mpsc::unbounded_channel::<()>();
         let (alias_tx, _alias_rx) = mpsc::unbounded_channel::<AliasCommand>();
+        let (fiche_tx, _fiche_rx) = mpsc::unbounded_channel::<FicheCommand>();
         let cmds = Commands {
             refresh_tx: &refresh_tx,
             alias_cmd_tx: &alias_tx,
+            fiche_cmd_tx: &fiche_tx,
         };
 
         handle_key(&mut app, key(KeyCode::Tab), &cmds);
@@ -316,9 +354,11 @@ mod tests {
 
         let (refresh_tx, _refresh_rx) = mpsc::unbounded_channel::<()>();
         let (alias_tx, _alias_rx) = mpsc::unbounded_channel::<AliasCommand>();
+        let (fiche_tx, _fiche_rx) = mpsc::unbounded_channel::<FicheCommand>();
         let cmds = Commands {
             refresh_tx: &refresh_tx,
             alias_cmd_tx: &alias_tx,
+            fiche_cmd_tx: &fiche_tx,
         };
 
         let flow = handle_key(&mut app, key(KeyCode::Enter), &cmds);

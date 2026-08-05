@@ -22,8 +22,16 @@ lisent/écrivent la même `malt_radar.db`.
   de métriques agrégées ni de digest — ça reste le rôle de la Phase 3, pas
   encore construite. Un fichier dont le frontmatter est absent/invalide
   est silencieusement ignoré plutôt que de faire échouer tout l'appel.
+- `DELETE /fiches/{filename}` — supprime une fiche (extraction erronée,
+  TJM hors bornes, etc.). Déclenché par la touche `d` dans le détail de
+  fiche du TUI. `filename` reste un simple nom de fichier dans
+  `data/fiches/` — jamais résolu tel quel, pour bloquer toute tentative de
+  path traversal. Idempotent comme `DELETE /skill-aliases` : supprimer une
+  fiche déjà absente répond `{"deleted": false}`, pas une 404 (le TUI n'a
+  pas de confirmation avant suppression, donc un double `d` ne doit pas
+  afficher une erreur).
 
-Les trois exigent `Authorization: Bearer <AGGREGATOR_API_TOKEN>`. Défense
+Ces quatre exigent `Authorization: Bearer <AGGREGATOR_API_TOKEN>`. Défense
 en profondeur uniquement : cette API n'est de toute façon jamais exposée
 que sur le réseau Tailscale (voir `server.py` et `../CLAUDE.md`) — le TUI
 devra donc, comme le worker, connaître ce secret partagé pour lire les

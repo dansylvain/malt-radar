@@ -17,7 +17,7 @@ use malt_radar_core::{
 use ratatui::widgets::ListState;
 use tokio::sync::mpsc;
 
-use crate::tasks::{AliasCommand, FetchOutcome, FICHES_LIMIT};
+use crate::tasks::{AliasCommand, FetchOutcome, FicheCommand, FICHES_LIMIT};
 
 /// Passed to `compute_metrics` — no cap, so every distinct skill shows in
 /// Top Skills (which scrolls now) rather than being folded into "Autres".
@@ -605,6 +605,22 @@ impl App {
         }
     }
 
+    /// Deletes the fiche shown by `Mode::FicheDetail`, both locally
+    /// (optimistic, same discipline as `defuse_selected_skill`) and on the
+    /// aggregator. Dropping it from `self.fiches` before `recompute()` is
+    /// what closes the overlay: `recompute` already closes `FicheDetail`
+    /// whenever `detail_fiche()` comes back empty (see its doc comment), so
+    /// there's no separate `close_fiche_detail()` call needed here.
+    pub fn delete_detail_fiche(&mut self, fiche_cmd_tx: &mpsc::UnboundedSender<FicheCommand>) {
+        let Some(filename) = self.detail_filename.clone() else {
+            return;
+        };
+        self.fiches.retain(|f| f.filename != filename);
+        self.recompute();
+        let _ = fiche_cmd_tx.send(FicheCommand::Delete { filename });
+        self.status_line = "fiche supprimée".to_string();
+    }
+
     pub fn toggle_help(&mut self) {
         self.mode = if self.mode == Mode::Help { Mode::Dashboard } else { Mode::Help };
     }
@@ -636,6 +652,13 @@ impl App {
                 // surfaces that the server-side write failed. It'll
                 // self-heal on the next periodic aliases refetch.
                 self.status_line = format!("erreur alias: {message}");
+            }
+            FetchOutcome::FicheDeleteErr(message) => {
+                // Same shape as AliasWriteErr: the fiche was already
+                // dropped locally (see `delete_detail_fiche`); a failed
+                // server-side delete just means it'll reappear on the next
+                // periodic refetch rather than staying gone.
+                self.status_line = format!("erreur suppression: {message}");
             }
         }
     }

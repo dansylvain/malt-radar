@@ -75,6 +75,7 @@ pub fn draw_help_overlay(frame: &mut Frame) {
         Line::from(""),
         section("Détail de fiche (Entrée)"),
         Line::from("  Esc/Entrée fermer  ·  o ouvrir l'URL  ·  ↑/↓ défiler"),
+        Line::from("  d supprimer la fiche"),
         Line::from(""),
         section("Audit des compétences (a)"),
         Line::from("  ←/→ colonne  ·  ↑/↓ j/k naviguer"),
