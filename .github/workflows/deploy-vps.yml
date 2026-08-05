@@ -1,0 +1,67 @@
+name: Deploy VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ingestion/**"
+      - "aggregator/**"
+      - ".github/workflows/deploy-vps.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+        working-directory: ingestion
+      - run: pytest -q
+        working-directory: ingestion
+      - run: pip install -e ../ingestion -e ".[dev]"
+        working-directory: aggregator
+      - run: pytest -q
+        working-directory: aggregator
+
+  deploy:
+    needs: test
+    runs-on: [self-hosted, vps-hetzner]
+    steps:
+      - name: Pull latest code
+        run: |
+          set -e
+          cd /home/dan/malt-radar
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Update ingestion deps
+        run: |
+          set -e
+          cd /home/dan/malt-radar/ingestion
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Update aggregator deps
+        run: |
+          set -e
+          cd /home/dan/malt-radar/aggregator
+          .venv/bin/pip install -e ../ingestion -e ".[dev]"
+
+      - name: Restart aggregator
+        run: sudo -n systemctl restart malt-radar-aggregator.service
+
+      - name: Health check
+        run: |
+          set -e
+          set -a
+          . /home/dan/malt-radar/aggregator/.env
+          set +a
+          sleep 2
+          curl -sf "http://$(tailscale ip -4):${AGGREGATOR_PORT:-8321}/missions/unprocessed?limit=1" \
+            -H "Authorization: Bearer ${AGGREGATOR_API_TOKEN}" > /dev/null

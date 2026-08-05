@@ -1,0 +1,43 @@
+name: Deploy Pi5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - ".github/workflows/deploy-pi5.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-pi5
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+        working-directory: worker
+      - run: pytest -q
+        working-directory: worker
+
+  deploy:
+    needs: test
+    runs-on: [self-hosted, pi5]
+    steps:
+      - name: Pull latest code
+        run: |
+          set -e
+          cd /home/dan/malt-radar
+          git fetch origin main
+          git reset --hard origin/main
+
+      - name: Update worker deps
+        run: |
+          set -e
+          cd /home/dan/malt-radar/worker
+          .venv/bin/pip install -e ".[dev]"
