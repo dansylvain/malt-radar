@@ -13,7 +13,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::App;
-use crate::ui::theme::{bold, centered_rect, ACCENT_COLOR};
+use crate::ui::theme::{bold, centered_rect, panel_title, ACCENT_COLOR};
 
 pub fn draw_fiche_detail(frame: &mut Frame, app: &mut App) {
     let Some(fiche) = app.detail_fiche() else { return };
@@ -77,7 +77,7 @@ pub fn draw_fiche_detail(frame: &mut Frame, app: &mut App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title("Détail de la fiche")
+        .title(panel_title("Détail de la fiche"))
         .border_style(Style::default().fg(ACCENT_COLOR));
     let inner = block.inner(popup);
 

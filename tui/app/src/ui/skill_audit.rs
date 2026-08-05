@@ -7,7 +7,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph};
 use ratatui::Frame;
 
 use crate::app::{App, AuditPanel};
-use crate::ui::theme::{bold, focus_style};
+use crate::ui::theme::{bold, focus_style, panel_title};
 
 /// Two columns, `←`/`→` to switch focus between them — orphans (raw,
 /// unmerged skill names) on the left, consolidated groups (the target of
@@ -45,7 +45,7 @@ pub fn draw_skill_audit(frame: &mut Frame, app: &mut App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!("Compétences seules — {}", app.audit_orphans.len())),
+                .title(panel_title(format!("Compétences seules — {}", app.audit_orphans.len()))),
         )
         .highlight_style(orphan_hl_style)
         .highlight_symbol(orphan_hl_symbol);
@@ -56,7 +56,7 @@ pub fn draw_skill_audit(frame: &mut Frame, app: &mut App) {
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!("Groupes fusionnés — {}", app.audit_consolidated.len())),
+                .title(panel_title(format!("Groupes fusionnés — {}", app.audit_consolidated.len()))),
         )
         .highlight_style(consolidated_hl_style)
         .highlight_symbol(consolidated_hl_symbol);

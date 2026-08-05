@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::App;
-use crate::ui::theme::{bold, centered_rect, ACCENT_COLOR};
+use crate::ui::theme::{bold, centered_rect, panel_title, ACCENT_COLOR};
 
 /// Small centered popup rendered on top of the Skill Audit view — lets the
 /// user type the canonical name `alias_edit.target` should merge into,
@@ -40,7 +40,7 @@ pub fn draw_alias_edit_overlay(frame: &mut Frame, app: &App) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title("Nouvel alias")
+        .title(panel_title("Nouvel alias"))
         .border_style(Style::default().fg(ACCENT_COLOR));
     frame.render_widget(Paragraph::new(lines).block(block), popup);
 }
@@ -90,7 +90,7 @@ pub fn draw_help_overlay(frame: &mut Frame) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title("Aide")
+        .title(panel_title("Aide"))
         .border_style(Style::default().fg(ACCENT_COLOR));
     frame.render_widget(Paragraph::new(lines).block(block), popup);
 }

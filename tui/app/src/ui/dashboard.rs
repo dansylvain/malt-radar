@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
-use malt_radar_core::{iqr_gauge_positions, truncate_label, Digest, Fiche, MarketMetrics, TjmTrend, TREND_WINDOW_DAYS};
+use malt_radar_core::{iqr_gauge_positions, truncate_label, Digest, Fiche, MarketMetrics, TjmTrend};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span, Text};
@@ -13,7 +13,8 @@ use ratatui::Frame;
 
 use crate::app::{App, Focus, Mode};
 use crate::ui::theme::{
-    bold, border_style, dim, focus_style, trend_style, ACCENT_COLOR, SKILL_BAR_WIDTH, SKILL_NAME_WIDTH,
+    bold, border_style, dim, focus_style, panel_title, trend_style, ACCENT_COLOR, SKILL_BAR_WIDTH,
+    SKILL_NAME_WIDTH,
 };
 
 const IQR_GAUGE_WIDTH: usize = 20;
@@ -29,7 +30,7 @@ pub fn draw_dashboard(frame: &mut Frame, app: &mut App) {
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(11),
+            Constraint::Length(9),
             Constraint::Fill(1),
             Constraint::Length(DIGEST_PANEL_HEIGHT),
             Constraint::Length(1),
@@ -71,10 +72,10 @@ pub fn draw_dashboard(frame: &mut Frame, app: &mut App) {
 fn format_trend(delta: Option<f64>) -> (String, Style) {
     let style = trend_style(delta);
     let text = match delta {
-        Some(d) if d > 1.0 => format!("↑ +{d:.0} ({TREND_WINDOW_DAYS}j)"),
-        Some(d) if d < -1.0 => format!("↓ {d:.0} ({TREND_WINDOW_DAYS}j)"),
-        Some(_) => format!("→ ({TREND_WINDOW_DAYS}j)"),
-        None => format!("— ({TREND_WINDOW_DAYS}j)"),
+        Some(d) if d > 1.0 => format!("↑ +{d:.0}"),
+        Some(d) if d < -1.0 => format!("↓ {d:.0}"),
+        Some(_) => "→".to_string(),
+        None => "—".to_string(),
     };
     (text, style)
 }
@@ -87,7 +88,7 @@ fn iqr_gauge_line(metrics: &MarketMetrics) -> Line<'static> {
         return Line::styled("TJM insuffisamment renseigné", dim());
     };
     let bar_style = Style::default().fg(ACCENT_COLOR);
-    let mut spans: Vec<Span<'static>> = (0..IQR_GAUGE_WIDTH)
+    let spans: Vec<Span<'static>> = (0..IQR_GAUGE_WIDTH)
         .map(|i| {
             if i == median_pos {
                 Span::styled("┃", bold().fg(ACCENT_COLOR))
@@ -98,8 +99,6 @@ fn iqr_gauge_line(metrics: &MarketMetrics) -> Line<'static> {
             }
         })
         .collect();
-    let (p25, p75) = (metrics.tjm.p25.unwrap_or_default(), metrics.tjm.p75.unwrap_or_default());
-    spans.push(Span::raw(format!("  p25 {p25:.0} · p75 {p75:.0}")));
     Line::from(spans)
 }
 
@@ -126,6 +125,17 @@ fn draw_market_metrics(frame: &mut Frame, area: Rect, metrics: &MarketMetrics, t
         line
     };
 
+    let range_line = match (tjm.min, tjm.max) {
+        (Some(min), Some(max)) => Line::styled(format!("  min {min:.0} · max {max:.0}"), dim()),
+        _ => Line::from(""),
+    };
+
+    let coverage_pct = (tjm.coverage_ratio() * 100.0).round() as i64;
+    let volume_line = Line::styled(
+        format!("  {} fiches · TJM connu {}/{} ({coverage_pct}%)", metrics.fiche_count, tjm.sample, tjm.total),
+        dim(),
+    );
+
     let avg = tjm.avg.map(fmt_eur).unwrap_or_else(|| "n/a".to_string());
     let top_skill = metrics
         .top_skills
@@ -134,8 +144,8 @@ fn draw_market_metrics(frame: &mut Frame, area: Rect, metrics: &MarketMetrics, t
         .unwrap_or_else(|| "n/a".to_string());
     let secondary_line = Line::styled(format!("  moyen {avg} · dominant {top_skill}"), dim());
 
-    let lines = vec![Line::from(""), hero_line, gauge_line, secondary_line];
-    let paragraph = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title("Market Metrics"));
+    let lines = vec![Line::from(""), hero_line, gauge_line, range_line, volume_line, secondary_line];
+    let paragraph = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(panel_title("MARKET METRICS")));
     frame.render_widget(paragraph, area);
 }
 
@@ -188,7 +198,7 @@ fn draw_top_skills(
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title("Top Skills")
+                .title(panel_title("TOP SKILLS"))
                 .border_style(border_style(focused)),
         )
         .highlight_style(hl_style)
@@ -310,7 +320,7 @@ fn draw_digest(frame: &mut Frame, area: Rect, digest: Option<&Digest>, scroll: &
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(title)
+        .title(panel_title(title))
         .border_style(border_style(focused));
     let inner = block.inner(area);
 
@@ -353,7 +363,7 @@ pub fn draw_digest_full(frame: &mut Frame, digest: Option<&Digest>, scroll: &mut
         )],
     };
 
-    let block = Block::default().borders(Borders::ALL).title(title);
+    let block = Block::default().borders(Borders::ALL).title(panel_title(title));
     let inner = block.inner(root[0]);
 
     let content = Paragraph::new(lines).wrap(Wrap { trim: false });
@@ -433,8 +443,8 @@ fn draw_live_feed(
         .collect();
 
     let title = match filter_label {
-        Some(label) => format!("Live Feed ({}/{} — {label})", visible.len(), resolved_fiches.len()),
-        None => format!("Live Feed ({})", resolved_fiches.len()),
+        Some(label) => format!("LIVE FEED ({}/{} — {label})", visible.len(), resolved_fiches.len()),
+        None => format!("LIVE FEED ({})", resolved_fiches.len()),
     };
 
     let (hl_style, hl_symbol) = focus_style(focused);
@@ -442,7 +452,7 @@ fn draw_live_feed(
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(title)
+                .title(panel_title(title))
                 .border_style(border_style(focused)),
         )
         .highlight_style(hl_style)
@@ -498,9 +508,81 @@ mod tests {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
-    use malt_radar_core::Digest;
+    use malt_radar_core::{Digest, MarketMetrics, SkillStat, TjmStats, TjmTrend};
 
-    use super::{draw_digest, draw_digest_full};
+    use super::{draw_digest, draw_digest_full, draw_market_metrics};
+
+    /// Flattens a `TestBackend`'s buffer into one string per row, trimmed of
+    /// trailing padding — lets tests assert on rendered text by substring
+    /// instead of poking at cells directly.
+    fn buffer_rows(terminal: &Terminal<TestBackend>) -> Vec<String> {
+        let buffer = terminal.backend().buffer();
+        let area = buffer.area;
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            })
+            .collect()
+    }
+
+    /// The bug this guards: the panel used to show only median/trend, the
+    /// IQR gauge and an average+dominant-skill line — no fiche count and no
+    /// min/max range. Confirms both were actually wired into the render, not
+    /// just into the data model. Also locks in that the trend arrow and the
+    /// gauge stay bare (no "(7j, n=X→Y)" / "p25 · p75" legend text) — Dan
+    /// found that annotation confusing in practice and asked for it back out.
+    #[test]
+    fn draw_market_metrics_shows_volume_and_range_without_cluttering_trend_or_gauge() {
+        let backend = TestBackend::new(60, 11);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let metrics = MarketMetrics {
+            fiche_count: 342,
+            tjm: TjmStats {
+                sample: 210,
+                total: 342,
+                avg: Some(495.0),
+                median: Some(480.0),
+                p25: Some(400.0),
+                p75: Some(605.0),
+                min: Some(250.0),
+                max: Some(900.0),
+            },
+            top_skills: vec![SkillStat {
+                name: "Python".to_string(),
+                count: 67,
+                percent: 32.0,
+                percent_rounded: 32,
+            }],
+        };
+        let trend = TjmTrend {
+            current: Some(495.0),
+            previous: Some(480.0),
+            delta: Some(15.0),
+            current_n: 32,
+            previous_n: 28,
+            undated: 0,
+        };
+
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                draw_market_metrics(frame, area, &metrics, &trend);
+            })
+            .unwrap();
+
+        let rows = buffer_rows(&terminal).join("\n");
+        assert!(rows.contains("342 fiches"), "expected fiche count, got:\n{rows}");
+        assert!(rows.contains("TJM connu 210/342"), "expected TJM coverage, got:\n{rows}");
+        assert!(rows.contains("min 250"), "expected min TJM, got:\n{rows}");
+        assert!(rows.contains("max 900"), "expected max TJM, got:\n{rows}");
+        assert!(!rows.contains("n="), "trend sample sizes should no longer render, got:\n{rows}");
+        assert!(!rows.contains("p25"), "gauge legend should no longer render, got:\n{rows}");
+        assert!(!rows.contains("p75"), "gauge legend should no longer render, got:\n{rows}");
+    }
 
     fn digest(summary_short: &str, content: &str) -> Digest {
         Digest {

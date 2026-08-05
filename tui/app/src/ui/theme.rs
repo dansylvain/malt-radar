@@ -6,6 +6,7 @@
 
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Span;
 
 pub const ACCENT_COLOR: Color = Color::Cyan;
 pub const SKILL_BAR_WIDTH: usize = 24;
@@ -34,6 +35,15 @@ pub fn border_style(focused: bool) -> Style {
 
 pub fn bold() -> Style {
     Style::default().add_modifier(Modifier::BOLD)
+}
+
+/// Bold+accent panel/block title — same pairing as the digest's `##`
+/// headers, and for the same reason (`bold()` alone doesn't reliably read
+/// as bold on every terminal). Every `Block::title(...)` in the TUI should
+/// go through this rather than a bare `&str`/`String`, so panel titles
+/// stay visually consistent.
+pub fn panel_title(text: impl Into<String>) -> Span<'static> {
+    Span::styled(text.into(), bold().fg(ACCENT_COLOR))
 }
 
 /// Secondary-tier text (e.g. the mean/dominant-skill line under Market
