@@ -79,7 +79,7 @@ pub fn draw_help_overlay(frame: &mut Frame) {
         Line::from("  d supprimer la fiche"),
         Line::from(""),
         section("Digest complet (Entrée sur le panneau Digest)"),
-        Line::from("  Esc/Entrée fermer  ·  ↑/↓ j/k défiler  ·  PgUp/PgDn  ·  Home"),
+        Line::from("  Esc/Entrée fermer  ·  ↑/↓ j/k défiler  ·  PgUp/PgDn  ·  Home/End"),
         Line::from(""),
         section("Audit des compétences (a)"),
         Line::from("  ←/→ colonne  ·  ↑/↓ j/k naviguer"),

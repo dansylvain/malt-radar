@@ -204,10 +204,10 @@ pub struct App {
     /// renders an explanatory message rather than blank content.
     pub digest: Option<Digest>,
     /// Line offset into `digest.summary_short` as shown in the dashboard
-    /// panel, same unbounded-`saturating` discipline as `detail_scroll`
-    /// (see `digest_scroll_by`) — reset to 0 only when a genuinely new
-    /// digest arrives (`apply`), not on every periodic refetch of the same
-    /// one.
+    /// panel (see `digest_scroll_by` for the lower bound and
+    /// `ui::dashboard::draw_digest` for the upper one) — reset to 0 only
+    /// when a genuinely new digest arrives (`apply`), not on every periodic
+    /// refetch of the same one.
     pub digest_scroll: u16,
     /// Line offset into `digest.content` as shown by `Mode::DigestFull` —
     /// separate from `digest_scroll` since the two views scroll
@@ -514,11 +514,10 @@ impl App {
     }
 
     /// Scrolls the Digest panel by `delta` lines (negative = up), clamped
-    /// at 0 — no upper bound, same imprecision as `detail_scroll`
-    /// (`draw_fiche_detail`): scrolling past the end of the content just
-    /// renders blank space rather than being clamped to the last line,
-    /// since knowing the true last line needs the wrapped line count,
-    /// which depends on the render width `App` doesn't have.
+    /// at 0 here — the upper bound (true wrapped-line count) needs the
+    /// render width `App` doesn't have, so it's enforced downstream every
+    /// frame instead (`ui::dashboard::draw_digest`, which takes
+    /// `digest_scroll` by `&mut` and clamps it in place).
     pub fn digest_scroll_by(&mut self, delta: i32) {
         let current = self.digest_scroll as i32;
         self.digest_scroll = (current + delta).max(0) as u16;
@@ -540,7 +539,9 @@ impl App {
         self.mode = Mode::Dashboard;
     }
 
-    /// Same clamped-at-0, no-upper-bound discipline as `digest_scroll_by`.
+    /// Same clamped-at-0-here, clamped-at-the-top-downstream discipline as
+    /// `digest_scroll_by` (upper bound enforced by
+    /// `ui::dashboard::draw_digest_full`).
     pub fn digest_full_scroll_by(&mut self, delta: i32) {
         let current = self.digest_full_scroll as i32;
         self.digest_full_scroll = (current + delta).max(0) as u16;

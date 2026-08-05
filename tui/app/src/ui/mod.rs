@@ -1,6 +1,8 @@
-//! Rendering. Every function here only *reads* application state — the
-//! single exception is the `&mut ListState` that ratatui's stateful
-//! widgets need to track their own scroll offset.
+//! Rendering. Every function here only *reads* application state, with two
+//! exceptions: the `&mut ListState` that ratatui's stateful widgets need to
+//! track their own scroll offset, and the digest scroll fields (`&mut u16`),
+//! clamped in place against the true wrapped-line count once the render
+//! width is known (see `dashboard::draw_digest`/`draw_digest_full`).
 
 pub mod dashboard;
 pub mod detail;
@@ -35,7 +37,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
             overlay::draw_help_overlay(frame);
         }
         Mode::DigestFull => {
-            dashboard::draw_digest_full(frame, app.digest.as_ref(), app.digest_full_scroll)
+            dashboard::draw_digest_full(frame, app.digest.as_ref(), &mut app.digest_full_scroll)
         }
     }
 }

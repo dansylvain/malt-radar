@@ -60,7 +60,7 @@ pub fn draw_dashboard(frame: &mut Frame, app: &mut App) {
         filter_label.as_deref(),
         app.focus == Focus::LiveFeed,
     );
-    draw_digest(frame, root[2], app.digest.as_ref(), app.digest_scroll, app.focus == Focus::Digest);
+    draw_digest(frame, root[2], app.digest.as_ref(), &mut app.digest_scroll, app.focus == Focus::Digest);
     draw_footer(frame, root[3], app);
 }
 
@@ -243,7 +243,13 @@ fn digest_content_lines(content: &str) -> Vec<Line<'static>> {
 /// `handle_dashboard_key`). Shows `summary_short` only — the panel is a
 /// compact ~6-line strip, and the full 5-section Markdown lives one
 /// `Enter` away in `Mode::DigestFull` (`draw_digest_full`).
-fn draw_digest(frame: &mut Frame, area: Rect, digest: Option<&Digest>, scroll: u16, focused: bool) {
+///
+/// `scroll` is taken by `&mut` and clamped in place against the true
+/// wrapped-line count (`Paragraph::line_count`, needs the render width,
+/// which only exists here) — this is what stops `digest_scroll_by` from
+/// scrolling past the last line into blank space, and it's why the clamp
+/// can't live in `App` itself.
+fn draw_digest(frame: &mut Frame, area: Rect, digest: Option<&Digest>, scroll: &mut u16, focused: bool) {
     let title = match digest {
         Some(d) => format!(
             "DAILY AI STRATEGY DIGEST — {} fiches · généré {} · [Entrée] pour le digest complet",
@@ -261,12 +267,17 @@ fn draw_digest(frame: &mut Frame, area: Rect, digest: Option<&Digest>, scroll: u
         )],
     };
 
-    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false }).scroll((scroll, 0)).block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title(title)
-            .border_style(border_style(focused)),
-    );
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .border_style(border_style(focused));
+    let inner = block.inner(area);
+
+    let content = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let total_lines = content.line_count(inner.width.max(1)) as u16;
+    *scroll = (*scroll).min(total_lines.saturating_sub(inner.height));
+
+    let paragraph = content.scroll((*scroll, 0)).block(block);
     frame.render_widget(paragraph, area);
 }
 
@@ -276,7 +287,9 @@ fn draw_digest(frame: &mut Frame, area: Rect, digest: Option<&Digest>, scroll: u
 /// shape as `skill_audit::draw_skill_audit`, rather than an overlay on top
 /// of the dashboard: the digest is long-form content meant to be read, not
 /// a popup glanced at and dismissed.
-pub fn draw_digest_full(frame: &mut Frame, digest: Option<&Digest>, scroll: u16) {
+///
+/// `scroll` is `&mut`, clamped in place — same reasoning as `draw_digest`.
+pub fn draw_digest_full(frame: &mut Frame, digest: Option<&Digest>, scroll: &mut u16) {
     let root = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Fill(1), Constraint::Length(1)])
@@ -299,10 +312,14 @@ pub fn draw_digest_full(frame: &mut Frame, digest: Option<&Digest>, scroll: u16)
         )],
     };
 
-    let paragraph = Paragraph::new(lines)
-        .wrap(Wrap { trim: false })
-        .scroll((scroll, 0))
-        .block(Block::default().borders(Borders::ALL).title(title));
+    let block = Block::default().borders(Borders::ALL).title(title);
+    let inner = block.inner(root[0]);
+
+    let content = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let total_lines = content.line_count(inner.width.max(1)) as u16;
+    *scroll = (*scroll).min(total_lines.saturating_sub(inner.height));
+
+    let paragraph = content.scroll((*scroll, 0)).block(block);
     frame.render_widget(paragraph, root[0]);
 
     let footer = Line::from(vec![
@@ -312,6 +329,8 @@ pub fn draw_digest_full(frame: &mut Frame, digest: Option<&Digest>, scroll: u16)
         Span::raw(" page  "),
         Span::styled("[Home]", bold()),
         Span::raw(" début  "),
+        Span::styled("[End]", bold()),
+        Span::raw(" fin  "),
         Span::styled("[Esc/Entrée]", bold()),
         Span::raw(" retour  "),
         Span::styled("[q]", bold()),
@@ -431,4 +450,82 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
         Span::raw(format!("   refresh {age}{loading_marker}")),
     ]);
     frame.render_widget(Paragraph::new(line), area);
+}
+
+#[cfg(test)]
+mod tests {
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    use malt_radar_core::Digest;
+
+    use super::{draw_digest, draw_digest_full};
+
+    fn digest(summary_short: &str, content: &str) -> Digest {
+        Digest {
+            summary_short: summary_short.to_string(),
+            content: content.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// The bug this guards: `digest_scroll_by` has no upper bound of its
+    /// own (see its doc comment) — before this fix, scrolling past the end
+    /// of a short digest just rendered blank space forever. The clamp now
+    /// lives here, where the render width/height needed to know the true
+    /// last line is actually available.
+    #[test]
+    fn draw_digest_clamps_scroll_to_the_wrapped_line_count() {
+        let backend = TestBackend::new(40, 8);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let d = digest("one\ntwo\nthree", "");
+        let mut scroll = u16::MAX;
+
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                draw_digest(frame, area, Some(&d), &mut scroll, false);
+            })
+            .unwrap();
+
+        // 3 content lines can never need more than a handful of rows of
+        // scroll offset, however large the input was.
+        assert!(scroll < 10, "expected scroll to be clamped near the content, got {scroll}");
+    }
+
+    #[test]
+    fn draw_digest_full_clamps_scroll_to_the_wrapped_line_count() {
+        let backend = TestBackend::new(40, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let d = digest("", "## Résumé\nune ligne\nune autre ligne");
+        let mut scroll = u16::MAX;
+
+        terminal
+            .draw(|frame| {
+                draw_digest_full(frame, Some(&d), &mut scroll);
+            })
+            .unwrap();
+
+        assert!(scroll < 10, "expected scroll to be clamped near the content, got {scroll}");
+    }
+
+    /// A digest longer than the viewport must still let scrolling reach a
+    /// non-zero offset — the clamp must bound scroll from above, not pin it
+    /// to 0 regardless of content length.
+    #[test]
+    fn draw_digest_full_allows_scrolling_content_taller_than_the_viewport() {
+        let backend = TestBackend::new(40, 6);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let long_content = (0..50).map(|i| format!("ligne {i}")).collect::<Vec<_>>().join("\n");
+        let d = digest("", &long_content);
+        let mut scroll = u16::MAX;
+
+        terminal
+            .draw(|frame| {
+                draw_digest_full(frame, Some(&d), &mut scroll);
+            })
+            .unwrap();
+
+        assert!(scroll > 0, "expected a tall digest to allow a positive scroll offset");
+    }
 }

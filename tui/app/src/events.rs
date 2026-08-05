@@ -103,13 +103,14 @@ fn handle_dashboard_key(app: &mut App, key: KeyEvent, cmds: &Commands) -> Flow {
             Focus::TopSkills => app.top_skills_select_first(),
             Focus::Digest => app.digest_scroll = 0,
         },
-        // Digest has no `End` behavior: the true last line depends on the
-        // wrapped line count, which needs the render width — not known
-        // here (same limitation `digest_scroll_by`'s doc comment notes).
+        // Digest's true last line depends on the wrapped line count, which
+        // needs the render width — not known here. `u16::MAX` overshoots on
+        // purpose; `ui::dashboard::draw_digest` clamps it down to the real
+        // bottom on the next frame.
         KeyCode::End => match app.focus {
             Focus::LiveFeed => app.feed_select_last(),
             Focus::TopSkills => app.top_skills_select_last(),
-            Focus::Digest => {}
+            Focus::Digest => app.digest_scroll = u16::MAX,
         },
         _ => {}
     }
@@ -145,6 +146,9 @@ fn handle_digest_full_key(app: &mut App, key: KeyEvent) -> Flow {
         KeyCode::PageDown => app.digest_full_scroll_by(PAGE_JUMP as i32),
         KeyCode::PageUp => app.digest_full_scroll_by(-(PAGE_JUMP as i32)),
         KeyCode::Home => app.digest_full_scroll = 0,
+        // Overshoots on purpose — `draw_digest_full` clamps to the real
+        // bottom next frame (see the `End` arm in `handle_dashboard_key`).
+        KeyCode::End => app.digest_full_scroll = u16::MAX,
         _ => {}
     }
     Flow::Continue
