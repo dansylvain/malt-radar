@@ -15,14 +15,14 @@ use ratatui::Frame;
 use crate::app::App;
 use crate::ui::theme::{bold, centered_rect, ACCENT_COLOR};
 
-pub fn draw_fiche_detail(frame: &mut Frame, app: &App) {
+pub fn draw_fiche_detail(frame: &mut Frame, app: &mut App) {
     let Some(fiche) = app.detail_fiche() else { return };
 
     let area = frame.area();
     let popup = centered_rect(area, 70, 18);
     frame.render_widget(Clear, popup);
 
-    let title = fiche.title.as_deref().unwrap_or("(sans titre)");
+    let title = fiche.title.clone().unwrap_or_else(|| "(sans titre)".to_string());
     let tjm = match (fiche.tjm_min, fiche.tjm_max) {
         (Some(min), Some(max)) => format!("{min:.0} – {max:.0} EUR/j"),
         (Some(v), None) | (None, Some(v)) => format!("{v:.0} EUR/j"),
@@ -59,8 +59,8 @@ pub fn draw_fiche_detail(frame: &mut Frame, app: &App) {
         Line::from(format!("Source      {source_line}")),
         Line::from(separator),
     ];
-    match &fiche.url {
-        Some(url) => lines.push(Line::styled(url.as_str(), Style::default().fg(ACCENT_COLOR))),
+    match fiche.url.clone() {
+        Some(url) => lines.push(Line::styled(url, Style::default().fg(ACCENT_COLOR))),
         None => lines.push(Line::from("(pas d'URL)")),
     }
     lines.push(Line::from(""));
@@ -79,9 +79,12 @@ pub fn draw_fiche_detail(frame: &mut Frame, app: &App) {
         .borders(Borders::ALL)
         .title("Détail de la fiche")
         .border_style(Style::default().fg(ACCENT_COLOR));
-    let paragraph = Paragraph::new(lines)
-        .block(block)
-        .wrap(Wrap { trim: false })
-        .scroll((app.detail_scroll, 0));
+    let inner = block.inner(popup);
+
+    let content = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let total_lines = content.line_count(inner.width.max(1)) as u16;
+    app.detail_scroll = app.detail_scroll.min(total_lines.saturating_sub(inner.height));
+
+    let paragraph = content.scroll((app.detail_scroll, 0)).block(block);
     frame.render_widget(paragraph, popup);
 }

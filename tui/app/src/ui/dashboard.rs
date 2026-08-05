@@ -219,22 +219,63 @@ fn format_digest_age(created_at: &str) -> String {
 
 /// Line-by-line "markdown-lite" styling — not a real Markdown renderer,
 /// just enough to make the fixed 5-section structure `digest.py`'s system
-/// prompt always produces (`## <Section>`, `---` separators) scannable in
-/// a terminal: `##` headers go bold+accent (prefix stripped), separators
-/// go dim, everything else renders as plain wrapped text.
+/// prompt always produces (`## <Section>`, `---` separators, `**bold**`
+/// emphasis) scannable in a terminal: `#`/`##` headers go bold+accent
+/// (prefix stripped, any `**` markers inside dropped since the whole line
+/// is already bold), separators go dim, everything else goes through
+/// `parse_inline_bold` so `**text**` spans render bold with the markers
+/// stripped.
 fn digest_content_lines(content: &str) -> Vec<Line<'static>> {
     content
         .lines()
         .map(|line| {
             if let Some(header) = line.strip_prefix("## ") {
-                Line::styled(header.to_string(), bold().fg(ACCENT_COLOR))
+                Line::styled(header.replace("**", ""), bold().fg(ACCENT_COLOR))
+            } else if let Some(header) = line.strip_prefix("# ") {
+                Line::styled(header.replace("**", ""), bold().fg(ACCENT_COLOR))
             } else if line.trim() == "---" {
                 Line::styled(line.to_string(), dim())
             } else {
-                Line::raw(line.to_string())
+                Line::from(parse_inline_bold(line))
             }
         })
         .collect()
+}
+
+/// Splits a line on `**bold**` markers, stripping the markers and returning
+/// the bracketed text as a bold span among plain-text spans either side. An
+/// unterminated `**` (no closing pair) is left as literal text rather than
+/// swallowed — a truncated digest shouldn't silently eat the marker.
+///
+/// Paired with `ACCENT_COLOR`, not just `Modifier::BOLD` alone: confirmed
+/// against a real render that some terminals don't visibly distinguish bold
+/// text without an accompanying colour change (same reason the `##` headers
+/// above pair `bold()` with `.fg(ACCENT_COLOR)` rather than using bold on
+/// its own).
+fn parse_inline_bold(line: &str) -> Vec<Span<'static>> {
+    let mut spans = Vec::new();
+    let mut rest = line;
+    while let Some(start) = rest.find("**") {
+        if start > 0 {
+            spans.push(Span::raw(rest[..start].to_string()));
+        }
+        let after_marker = &rest[start + 2..];
+        match after_marker.find("**") {
+            Some(end) => {
+                spans.push(Span::styled(after_marker[..end].to_string(), bold().fg(ACCENT_COLOR)));
+                rest = &after_marker[end + 2..];
+            }
+            None => {
+                spans.push(Span::raw(rest[start..].to_string()));
+                rest = "";
+                break;
+            }
+        }
+    }
+    if !rest.is_empty() {
+        spans.push(Span::raw(rest.to_string()));
+    }
+    spans
 }
 
 /// Scrollable (see `App::digest_scroll_by`) and focusable like Top

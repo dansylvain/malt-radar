@@ -1,8 +1,9 @@
 //! Rendering. Every function here only *reads* application state, with two
 //! exceptions: the `&mut ListState` that ratatui's stateful widgets need to
-//! track their own scroll offset, and the digest scroll fields (`&mut u16`),
-//! clamped in place against the true wrapped-line count once the render
-//! width is known (see `dashboard::draw_digest`/`draw_digest_full`).
+//! track their own scroll offset, and the scroll fields (`&mut u16`) for
+//! digest/detail content, clamped in place against the true wrapped-line
+//! count once the render width is known (see
+//! `dashboard::draw_digest`/`draw_digest_full`/`detail::draw_fiche_detail`).
 
 pub mod dashboard;
 pub mod detail;
