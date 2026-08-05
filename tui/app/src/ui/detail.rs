@@ -7,13 +7,14 @@
 //! ctrl-clickable on their own, and `o` opens it directly (see
 //! `crate::browser`).
 
+use malt_radar_core::is_sensitive_skill;
 use ratatui::style::Style;
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::App;
-use crate::ui::theme::{bold, centered_rect, panel_title, ACCENT_COLOR};
+use crate::ui::theme::{base_style, bold, centered_rect, panel_title, AMBER, BG, RED, TEAL};
 
 pub fn draw_fiche_detail(frame: &mut Frame, app: &mut App) {
     let Some(fiche) = app.detail_fiche() else { return };
@@ -33,11 +34,6 @@ pub fn draw_fiche_detail(frame: &mut Frame, app: &mut App) {
         (Some(v), None) => v.to_string(),
         (None, _) => "n/a".to_string(),
     };
-    let stack = if fiche.stack.is_empty() {
-        "(stack non extraite)".to_string()
-    } else {
-        fiche.stack.join(" · ")
-    };
     let source_line = match (&fiche.source, &fiche.published_at) {
         (Some(source), Some(published)) => format!("{source} · publiée le {published}"),
         (Some(source), None) => source.clone(),
@@ -46,21 +42,37 @@ pub fn draw_fiche_detail(frame: &mut Frame, app: &mut App) {
     };
     let separator = "─".repeat(popup.width.saturating_sub(2) as usize);
 
+    // Stack tags as separate spans, not one joined string, so a
+    // security-sensitive tag (EDR/SIEM/XDR/Cybersécurité) can be picked out
+    // in red — same treatment as the Live Feed row this popup expands on.
+    let mut stack_spans = vec![Span::raw("Stack       ")];
+    if fiche.stack.is_empty() {
+        stack_spans.push(Span::raw("(stack non extraite)"));
+    } else {
+        for (i, skill) in fiche.stack.iter().enumerate() {
+            if i > 0 {
+                stack_spans.push(Span::raw(" · "));
+            }
+            let style = if is_sensitive_skill(skill) { Style::default().fg(RED) } else { Style::default() };
+            stack_spans.push(Span::styled(skill.clone(), style));
+        }
+    }
+
     let mut lines = vec![
         Line::styled(title, bold()),
         Line::from(separator.clone()),
         Line::from(format!("Société     {}", fiche.company.as_deref().unwrap_or("n/a"))),
         Line::from(format!("Lieu        {}", fiche.location.as_deref().unwrap_or("n/a"))),
-        Line::from(format!("TJM         {tjm}")),
+        Line::from(vec![Span::raw("TJM         "), Span::styled(tjm, Style::default().fg(AMBER))]),
         Line::from(format!("Durée       {duree}")),
         Line::from(format!("Niveau      {}", fiche.niveau.as_deref().unwrap_or("n/a"))),
 //        Line::from(format!("Catégorie   {}", fiche.categorie.as_deref().unwrap_or("n/a"))),
-        Line::from(format!("Stack       {stack}")),
+        Line::from(stack_spans),
         Line::from(format!("Source      {source_line}")),
         Line::from(separator),
     ];
     match fiche.url.clone() {
-        Some(url) => lines.push(Line::styled(url, Style::default().fg(ACCENT_COLOR))),
+        Some(url) => lines.push(Line::styled(url, Style::default().fg(TEAL))),
         None => lines.push(Line::from("(pas d'URL)")),
     }
     lines.push(Line::from(""));
@@ -75,13 +87,17 @@ pub fn draw_fiche_detail(frame: &mut Frame, app: &mut App) {
         ratatui::text::Span::raw(" supprimer"),
     ]));
 
+    // Teal: this overlay only opens from the Live Feed, so it borrows the
+    // Live Feed's brand-teal interaction colour rather than a colour of its
+    // own.
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(panel_title("Détail de la fiche"))
-        .border_style(Style::default().fg(ACCENT_COLOR));
+        .title(panel_title("Détail de la fiche", TEAL))
+        .border_style(Style::default().fg(TEAL))
+        .style(Style::default().bg(BG));
     let inner = block.inner(popup);
 
-    let content = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let content = Paragraph::new(lines).style(base_style()).wrap(Wrap { trim: false });
     let total_lines = content.line_count(inner.width.max(1)) as u16;
     app.detail_scroll = app.detail_scroll.min(total_lines.saturating_sub(inner.height));
 

@@ -73,7 +73,12 @@
       "Bash(rm -rf data)",
       "Bash(rm -f .env)",
       "Bash(python -m pytest tests/test_digest.py -q)",
-      "Bash(.venv/bin/pytest tests/test_digest.py -q)"
+      "Bash(.venv/bin/pytest tests/test_digest.py -q)",
+      "Bash(pip3 list *)",
+      "Bash(/tmp/claude-1000/-home-dsylvain-projects-malt-radar/7c2f6bad-64f2-43b6-89eb-9eb7692d78e6/scratchpad/venv/bin/pip install *)",
+      "Bash(fc-list)",
+      "Bash($SCRATCH/venv/bin/python *)",
+      "Bash(tmux list-sessions *)"
     ]
   }
 }

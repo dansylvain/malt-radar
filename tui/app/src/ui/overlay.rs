@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
 use crate::app::App;
-use crate::ui::theme::{bold, centered_rect, panel_title, ACCENT_COLOR};
+use crate::ui::theme::{base_style, bold, centered_rect, panel_title, BG, TEAL, VIOLET};
 
 /// Small centered popup rendered on top of the Skill Audit view — lets the
 /// user type the canonical name `alias_edit.target` should merge into,
@@ -31,18 +31,21 @@ pub fn draw_alias_edit_overlay(frame: &mut Frame, app: &App) {
     ];
     for (i, suggestion) in state.suggestions.iter().enumerate() {
         let style = if state.suggestion_index == Some(i) {
-            bold().fg(ACCENT_COLOR)
+            bold().fg(VIOLET)
         } else {
             Style::default()
         };
         lines.push(Line::styled(format!("  {suggestion}"), style));
     }
 
+    // Violet: this popup only ever opens on top of the Skill Audit view,
+    // so it carries the same identity colour rather than the brand teal.
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(panel_title("Nouvel alias"))
-        .border_style(Style::default().fg(ACCENT_COLOR));
-    frame.render_widget(Paragraph::new(lines).block(block), popup);
+        .title(panel_title("Nouvel alias", VIOLET))
+        .border_style(Style::default().fg(VIOLET))
+        .style(Style::default().bg(BG));
+    frame.render_widget(Paragraph::new(lines).style(base_style()).block(block), popup);
 }
 
 /// Static keymap reference — the footer only has room for a handful of
@@ -57,7 +60,7 @@ pub fn draw_help_overlay(frame: &mut Frame) {
     // fails to unify across the several differently-lived `&'static str`
     // literals below. A plain fn is properly generic over its lifetime.
     fn section(title: &str) -> Line<'_> {
-        Line::styled(title, bold().fg(ACCENT_COLOR))
+        Line::styled(title, bold().fg(TEAL))
     }
     let lines = vec![
         section("Dashboard"),
@@ -90,7 +93,8 @@ pub fn draw_help_overlay(frame: &mut Frame) {
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(panel_title("Aide"))
-        .border_style(Style::default().fg(ACCENT_COLOR));
-    frame.render_widget(Paragraph::new(lines).block(block), popup);
+        .title(panel_title("Aide", TEAL))
+        .border_style(Style::default().fg(TEAL))
+        .style(Style::default().bg(BG));
+    frame.render_widget(Paragraph::new(lines).style(base_style()).block(block), popup);
 }

@@ -39,6 +39,22 @@ pub struct Fiche {
 /// with `…` when it doesn't fit — keeps fixed-width table/column layouts
 /// aligned regardless of how long a value (e.g. a skill name) turns out to
 /// be. Counts chars, not bytes, so multi-byte UTF-8 isn't cut mid-character.
+/// Skill/stack tag names flagged as security-sensitive — coloured red in
+/// the TUI (Live Feed rows, fiche detail, Skill Audit) so a freelancer
+/// scanning the feed spots "sécurité" fiches at a glance. Scoped to
+/// exactly the keywords the palette spec calls out (EDR/SIEM/XDR/
+/// Cybersécurité), matched by substring on the folded name since raw
+/// skill strings vary in shape, e.g. "Endpoint detection and response
+/// (EDR)" or "Security Information Event Management (SIEM)".
+const SENSITIVE_SKILL_KEYWORDS: &[&str] = &["edr", "siem", "xdr", "cybersecurite"];
+
+/// Whether `name` (a skill or stack tag) should be flagged as
+/// security-sensitive — see `SENSITIVE_SKILL_KEYWORDS`.
+pub fn is_sensitive_skill(name: &str) -> bool {
+    let folded = fold_for_search(name);
+    SENSITIVE_SKILL_KEYWORDS.iter().any(|kw| folded.contains(kw))
+}
+
 pub fn truncate_label(label: &str, max_width: usize) -> String {
     if label.chars().count() <= max_width {
         return label.to_string();
@@ -1104,6 +1120,18 @@ mod tests {
     fn fold_for_search_lowercases_and_strips_accents() {
         assert_eq!(fold_for_search("Données"), "donnees");
         assert_eq!(fold_for_search("Ingénieur À Paris"), "ingenieur a paris");
+    }
+
+    #[test]
+    fn is_sensitive_skill_matches_known_security_tags_case_and_accent_insensitively() {
+        assert!(is_sensitive_skill("EDR"));
+        assert!(is_sensitive_skill("Endpoint detection and response (EDR)"));
+        assert!(is_sensitive_skill("Security Information Event Management (SIEM)"));
+        assert!(is_sensitive_skill("XDR"));
+        assert!(is_sensitive_skill("Cybersécurité"));
+        assert!(is_sensitive_skill("cybersecurite"));
+        assert!(!is_sensitive_skill("Python"));
+        assert!(!is_sensitive_skill("BigQuery"));
     }
 
     #[test]

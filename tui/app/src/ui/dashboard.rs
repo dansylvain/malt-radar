@@ -4,7 +4,9 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
-use malt_radar_core::{iqr_gauge_positions, truncate_label, Digest, Fiche, MarketMetrics, TjmTrend};
+use malt_radar_core::{
+    is_sensitive_skill, iqr_gauge_positions, truncate_label, Digest, Fiche, MarketMetrics, TjmTrend,
+};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span, Text};
@@ -13,8 +15,8 @@ use ratatui::Frame;
 
 use crate::app::{App, Focus, Mode};
 use crate::ui::theme::{
-    bold, border_style, dim, focus_style, panel_title, trend_style, ACCENT_COLOR, SKILL_BAR_WIDTH,
-    SKILL_NAME_WIDTH,
+    base_style, bold, border_style, dim, focus_style, panel_title, skill_bar_gradient, status_style,
+    trend_style, AMBER, BORDER_NEUTRAL, RED, SKILL_BAR_WIDTH, SKILL_NAME_WIDTH, TEAL, VIOLET,
 };
 
 const IQR_GAUGE_WIDTH: usize = 20;
@@ -87,11 +89,11 @@ fn iqr_gauge_line(metrics: &MarketMetrics) -> Line<'static> {
     let Some((p25_pos, median_pos, p75_pos)) = iqr_gauge_positions(&metrics.tjm, IQR_GAUGE_WIDTH) else {
         return Line::styled("TJM insuffisamment renseigné", dim());
     };
-    let bar_style = Style::default().fg(ACCENT_COLOR);
+    let bar_style = Style::default().fg(AMBER);
     let spans: Vec<Span<'static>> = (0..IQR_GAUGE_WIDTH)
         .map(|i| {
             if i == median_pos {
-                Span::styled("┃", bold().fg(ACCENT_COLOR))
+                Span::styled("┃", bold().fg(AMBER))
             } else if i >= p25_pos && i <= p75_pos {
                 Span::styled("█", bar_style)
             } else {
@@ -111,7 +113,7 @@ fn draw_market_metrics(frame: &mut Frame, area: Rect, metrics: &MarketMetrics, t
             let (trend_text, trend_style) = format_trend(trend.delta);
             Line::from(vec![
                 Span::raw("  "),
-                Span::styled(fmt_eur(median), bold().fg(ACCENT_COLOR)),
+                Span::styled(fmt_eur(median), bold().fg(AMBER)),
                 Span::raw("    "),
                 Span::styled(trend_text, trend_style),
             ])
@@ -145,7 +147,11 @@ fn draw_market_metrics(frame: &mut Frame, area: Rect, metrics: &MarketMetrics, t
     let secondary_line = Line::styled(format!("  moyen {avg} · dominant {top_skill}"), dim());
 
     let lines = vec![Line::from(""), hero_line, gauge_line, range_line, volume_line, secondary_line];
-    let paragraph = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(panel_title("MARKET METRICS")));
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(panel_title("MARKET METRICS", TEAL))
+        .border_style(Style::default().fg(TEAL));
+    let paragraph = Paragraph::new(lines).style(base_style()).block(block);
     frame.render_widget(paragraph, area);
 }
 
@@ -176,30 +182,36 @@ fn draw_top_skills(
             } else {
                 ((skill.count as f64 / max_count as f64) * SKILL_BAR_WIDTH as f64).round() as usize
             };
-            let bar = format!("{}{}", "█".repeat(filled), " ".repeat(SKILL_BAR_WIDTH - filled));
             let name = truncate_label(&skill.name, SKILL_NAME_WIDTH);
             let pct = if skill.percent_rounded == 0 {
                 "<1%".to_string()
             } else {
                 format!("{}%", skill.percent_rounded)
             };
-            let line = Line::from(vec![
+            // Teal → near-bg gradient rather than a flat fill, one span per
+            // cell — the palette's explicit call-out for these bars, kept
+            // separate from the panel's own violet identity (border/title).
+            let mut spans = vec![
                 Span::raw(format!("{name:<SKILL_NAME_WIDTH$}")),
                 Span::raw("["),
-                Span::styled(bar, Style::default().fg(ACCENT_COLOR)),
-                Span::raw(format!("] {:>3} {pct:>4}", skill.count)),
-            ]);
-            ListItem::new(line)
+            ];
+            for i in 0..SKILL_BAR_WIDTH {
+                let ch = if i < filled { "█" } else { " " };
+                spans.push(Span::styled(ch, Style::default().fg(skill_bar_gradient(i, SKILL_BAR_WIDTH))));
+            }
+            spans.push(Span::raw(format!("] {:>3} {pct:>4}", skill.count)));
+            ListItem::new(Line::from(spans))
         })
         .collect();
 
-    let (hl_style, hl_symbol) = focus_style(focused);
+    let (hl_style, hl_symbol) = focus_style(focused, VIOLET);
     let list = List::new(items)
+        .style(base_style())
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(panel_title("TOP SKILLS"))
-                .border_style(border_style(focused)),
+                .title(panel_title("TOP SKILLS", VIOLET))
+                .border_style(border_style(focused, VIOLET)),
         )
         .highlight_style(hl_style)
         .highlight_symbol(hl_symbol);
@@ -234,19 +246,21 @@ fn format_digest_age(created_at: &str) -> String {
 /// (prefix stripped, any `**` markers inside dropped since the whole line
 /// is already bold), separators go dim, everything else goes through
 /// `parse_inline_bold` so `**text**` spans render bold with the markers
-/// stripped.
-fn digest_content_lines(content: &str) -> Vec<Line<'static>> {
+/// stripped. `accent` is the digest's identity colour (`VIOLET`), passed
+/// through rather than hardcoded so this stays reusable if a caller ever
+/// needs a different emphasis colour.
+fn digest_content_lines(content: &str, accent: Color) -> Vec<Line<'static>> {
     content
         .lines()
         .map(|line| {
             if let Some(header) = line.strip_prefix("## ") {
-                Line::styled(header.replace("**", ""), bold().fg(ACCENT_COLOR))
+                Line::styled(header.replace("**", ""), bold().fg(accent))
             } else if let Some(header) = line.strip_prefix("# ") {
-                Line::styled(header.replace("**", ""), bold().fg(ACCENT_COLOR))
+                Line::styled(header.replace("**", ""), bold().fg(accent))
             } else if line.trim() == "---" {
                 Line::styled(line.to_string(), dim())
             } else {
-                Line::from(parse_inline_bold(line))
+                Line::from(parse_inline_bold(line, accent))
             }
         })
         .collect()
@@ -257,12 +271,12 @@ fn digest_content_lines(content: &str) -> Vec<Line<'static>> {
 /// unterminated `**` (no closing pair) is left as literal text rather than
 /// swallowed — a truncated digest shouldn't silently eat the marker.
 ///
-/// Paired with `ACCENT_COLOR`, not just `Modifier::BOLD` alone: confirmed
-/// against a real render that some terminals don't visibly distinguish bold
-/// text without an accompanying colour change (same reason the `##` headers
-/// above pair `bold()` with `.fg(ACCENT_COLOR)` rather than using bold on
-/// its own).
-fn parse_inline_bold(line: &str) -> Vec<Span<'static>> {
+/// Paired with `accent`, not just `Modifier::BOLD` alone: confirmed against
+/// a real render that some terminals don't visibly distinguish bold text
+/// without an accompanying colour change (same reason the `##` headers
+/// above pair `bold()` with `.fg(accent)` rather than using bold on its
+/// own).
+fn parse_inline_bold(line: &str, accent: Color) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     let mut rest = line;
     while let Some(start) = rest.find("**") {
@@ -272,7 +286,7 @@ fn parse_inline_bold(line: &str) -> Vec<Span<'static>> {
         let after_marker = &rest[start + 2..];
         match after_marker.find("**") {
             Some(end) => {
-                spans.push(Span::styled(after_marker[..end].to_string(), bold().fg(ACCENT_COLOR)));
+                spans.push(Span::styled(after_marker[..end].to_string(), bold().fg(accent)));
                 rest = &after_marker[end + 2..];
             }
             None => {
@@ -311,7 +325,7 @@ fn draw_digest(frame: &mut Frame, area: Rect, digest: Option<&Digest>, scroll: &
     };
 
     let lines = match digest {
-        Some(d) => digest_content_lines(&d.summary_short),
+        Some(d) => digest_content_lines(&d.summary_short, VIOLET),
         None => vec![Line::styled(
             "Aucun digest généré pour l'instant — le job quotidien n'a pas encore tourné.",
             dim(),
@@ -320,11 +334,11 @@ fn draw_digest(frame: &mut Frame, area: Rect, digest: Option<&Digest>, scroll: &
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(panel_title(title))
-        .border_style(border_style(focused));
+        .title(panel_title(title, VIOLET))
+        .border_style(border_style(focused, VIOLET));
     let inner = block.inner(area);
 
-    let content = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let content = Paragraph::new(lines).style(base_style()).wrap(Wrap { trim: false });
     let total_lines = content.line_count(inner.width.max(1)) as u16;
     *scroll = (*scroll).min(total_lines.saturating_sub(inner.height));
 
@@ -356,17 +370,20 @@ pub fn draw_digest_full(frame: &mut Frame, digest: Option<&Digest>, scroll: &mut
     };
 
     let lines = match digest {
-        Some(d) => digest_content_lines(&d.content),
+        Some(d) => digest_content_lines(&d.content, VIOLET),
         None => vec![Line::styled(
             "Aucun digest généré pour l'instant — le job quotidien n'a pas encore tourné.",
             dim(),
         )],
     };
 
-    let block = Block::default().borders(Borders::ALL).title(panel_title(title));
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(panel_title(title, VIOLET))
+        .border_style(Style::default().fg(VIOLET));
     let inner = block.inner(root[0]);
 
-    let content = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let content = Paragraph::new(lines).style(base_style()).wrap(Wrap { trim: false });
     let total_lines = content.line_count(inner.width.max(1)) as u16;
     *scroll = (*scroll).min(total_lines.saturating_sub(inner.height));
 
@@ -415,11 +432,6 @@ fn draw_live_feed(
                 .tjm_mid()
                 .map(|v| format!("{v:.0} EUR/j"))
                 .unwrap_or_else(|| "TJM n/a".to_string());
-            let stack = if fiche.stack.is_empty() {
-                "(stack non extraite)".to_string()
-            } else {
-                fiche.stack.join(", ")
-            };
 
             // Fraîche depuis le dernier refresh : marqueur `•` + accent en
             // façade, jamais un fond coloré (les aplats de fond sortent mal
@@ -428,17 +440,33 @@ fn draw_live_feed(
             // Paragraph), d'où la coupure sans retour à la ligne observée.
             let is_fresh = fresh.contains(&fiche.filename);
             let marker = if is_fresh { "• " } else { "  " };
-            let text = Text::from(vec![
-                Line::from(format!("{marker}{title} — {company} — {tjm}")),
-                Line::from(format!("    {stack}")),
-            ]);
-            let style = if is_fresh {
-                Style::default().fg(ACCENT_COLOR)
-            } else {
-                Style::default()
-            };
+            let row_style = if is_fresh { Style::default().fg(TEAL) } else { Style::default() };
 
-            ListItem::new(text).style(style)
+            let head_line = Line::from(vec![
+                Span::raw(format!("{marker}{title} — {company} — ")),
+                Span::styled(tjm, Style::default().fg(AMBER)),
+            ]);
+
+            // Stack tags get their own spans (not one joined string) so a
+            // security-sensitive tag (EDR/SIEM/XDR/Cybersécurité — see
+            // `is_sensitive_skill`) can be picked out in red among the rest,
+            // per the palette's "repérer d'un coup d'œil les fiches
+            // sécurité" recommendation.
+            let mut stack_spans = vec![Span::raw("    ")];
+            if fiche.stack.is_empty() {
+                stack_spans.push(Span::raw("(stack non extraite)"));
+            } else {
+                for (i, skill) in fiche.stack.iter().enumerate() {
+                    if i > 0 {
+                        stack_spans.push(Span::raw(", "));
+                    }
+                    let style = if is_sensitive_skill(skill) { Style::default().fg(RED) } else { Style::default() };
+                    stack_spans.push(Span::styled(skill.clone(), style));
+                }
+            }
+
+            let text = Text::from(vec![head_line, Line::from(stack_spans)]);
+            ListItem::new(text).style(row_style)
         })
         .collect();
 
@@ -447,13 +475,18 @@ fn draw_live_feed(
         None => format!("LIVE FEED ({})", resolved_fiches.len()),
     };
 
-    let (hl_style, hl_symbol) = focus_style(focused);
+    // Live Feed carries no panel identity of its own — border stays neutral
+    // whether focused or not, so it doesn't compete with the amber/red data
+    // it lists; the `>` cursor and row highlight (in brand teal) are the
+    // focus cue instead.
+    let (hl_style, hl_symbol) = focus_style(focused, TEAL);
     let list = List::new(items)
+        .style(base_style())
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(panel_title(title))
-                .border_style(border_style(focused)),
+                .title(panel_title(title, TEAL))
+                .border_style(Style::default().fg(BORDER_NEUTRAL)),
         )
         .highlight_style(hl_style)
         .highlight_symbol(hl_symbol);
@@ -465,7 +498,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
         let line = Line::from(vec![
             Span::raw("/"),
             Span::raw(app.feed.filter_text.as_str()),
-            Span::styled("▏", Style::default().fg(Color::Yellow)),
+            Span::styled("▏", Style::default().fg(TEAL)),
             Span::raw("   "),
             Span::styled("[Entrée]", bold()),
             Span::raw(" valider  "),
@@ -474,7 +507,7 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
             Span::styled("[Ctrl+U]", bold()),
             Span::raw(" vider"),
         ]);
-        frame.render_widget(Paragraph::new(line), area);
+        frame.render_widget(Paragraph::new(line).style(base_style()), area);
         return;
     }
 
@@ -497,10 +530,10 @@ fn draw_footer(frame: &mut Frame, area: Rect, app: &App) {
             "{} fiches · TJM connu {}/{} ({coverage_pct}%)   ",
             app.metrics.fiche_count, tjm.sample, tjm.total
         )),
-        Span::styled(&app.status_line, Style::default().fg(Color::Yellow)),
+        Span::styled(&app.status_line, status_style(&app.status_line)),
         Span::raw(format!("   refresh {age}{loading_marker}")),
     ]);
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(line).style(base_style()), area);
 }
 
 #[cfg(test)]

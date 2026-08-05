@@ -11,11 +11,21 @@ pub mod overlay;
 pub mod skill_audit;
 pub mod theme;
 
+use ratatui::style::Style;
+use ratatui::widgets::Block;
 use ratatui::Frame;
 
 use crate::app::{App, Mode};
+use crate::ui::theme::BG;
 
 pub fn draw(frame: &mut Frame, app: &mut App) {
+    // The app's own canvas, painted once behind everything else — see
+    // `theme`'s module doc for why this (and only this) is a background
+    // fill. Every panel/overlay below either leaves it showing through
+    // (Block borders with no `bg` of their own) or repaints it explicitly
+    // via `theme::base_style()`.
+    frame.render_widget(Block::default().style(Style::default().bg(BG)), frame.area());
+
     // Stateful (`&mut ListState`) rendering is why `app` is borrowed
     // mutably here, unlike everything downstream.
     match app.mode {
