@@ -36,7 +36,15 @@ _SCHEMA_HINT = """Réponds UNIQUEMENT avec un objet JSON valide, sans aucun text
   "duree_unite": "jour" ou "mois" ou "an" ou null,
   "niveau": "junior" ou "confirmé" ou "senior" ou "expert" ou null,
   "categorie": "RAG" ou "Agent" ou "Vision" ou "Fine-tuning" ou "Autre"
-}"""
+}
+
+Précisions sur tjm_min/tjm_max : ce sont des TAUX JOURNALIERS MOYENS (TJM)
+en euros, pas un salaire annuel ni un montant total de mission. Un TJM
+plausible pour une mission freelance IA/Data en France se situe entre 300
+et 1500 €/jour, rarement jusqu'à 2000-2500 € pour un profil senior ou une
+expertise rare. Si le texte mentionne un salaire annuel, un montant global
+de mission, ou un chiffre dont tu n'es pas sûr qu'il s'agisse bien d'un TJM
+journalier, renvoie null plutôt que de deviner ou de convertir toi-même."""
 
 _HTML_TAG = re.compile(r"<[^>]+>")
 
@@ -77,7 +85,11 @@ def build_prompt(mission: dict) -> str:
         "technologie précise n'y apparaît, renvoie stack: [] plutôt que d'en "
         "inventer une. "
         "La catégorie doit refléter le sujet dominant de la mission — choisis "
-        "\"Autre\" plutôt que de forcer une catégorie qui ne correspond pas.\n\n"
+        "\"Autre\" plutôt que de forcer une catégorie qui ne correspond pas. "
+        "Le TJM (tjm_min/tjm_max) doit rester un taux JOURNALIER — si \"Texte "
+        "salaire brut\" ou la description semble donner un salaire annuel, un "
+        "forfait total, ou un chiffre ambigu, ne le convertis pas toi-même : "
+        "renvoie null.\n\n"
         f"{context}\n\n{_SCHEMA_HINT}"
     )
 

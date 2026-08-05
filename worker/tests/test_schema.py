@@ -37,3 +37,31 @@ def test_extraction_rejects_unknown_categorie():
 def test_extraction_rejects_unknown_niveau():
     with pytest.raises(ValidationError):
         Extraction(niveau="stagiaire")
+
+
+def test_extraction_rejects_tjm_above_upper_bound():
+    with pytest.raises(ValidationError):
+        Extraction(tjm_max=100250)
+
+
+def test_extraction_rejects_tjm_below_lower_bound():
+    with pytest.raises(ValidationError):
+        Extraction(tjm_min=0)
+
+
+def test_extraction_rejects_tjm_min_greater_than_tjm_max():
+    with pytest.raises(ValidationError):
+        Extraction(tjm_min=800, tjm_max=500)
+
+
+def test_extraction_accepts_tjm_min_equal_to_tjm_max():
+    extraction = Extraction(tjm_min=500, tjm_max=500)
+
+    assert extraction.tjm_min == extraction.tjm_max == 500
+
+
+def test_extraction_accepts_tjm_at_bounds():
+    extraction = Extraction(tjm_min=100, tjm_max=3000)
+
+    assert extraction.tjm_min == 100
+    assert extraction.tjm_max == 3000

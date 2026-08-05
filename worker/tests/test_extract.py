@@ -95,6 +95,24 @@ def test_extract_retries_on_schema_violation():
     assert extraction.categorie == "RAG"
 
 
+def test_extract_retries_on_implausible_tjm_then_succeeds():
+    attempts = {"count": 0}
+    implausible_tjm = json.dumps({**json.loads(VALID_JSON), "tjm_max": 100250})
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        if attempts["count"] < 2:
+            return _ollama_response(implausible_tjm)
+        return _ollama_response(VALID_JSON)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    extraction = extract(MISSION, client=client)
+
+    assert attempts["count"] == 2
+    assert extraction.tjm_max == 700
+
+
 def test_extract_raises_after_exhausting_retries():
     def handler(request: httpx.Request) -> httpx.Response:
         return _ollama_response("not json")

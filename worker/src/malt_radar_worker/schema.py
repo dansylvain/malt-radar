@@ -10,18 +10,27 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Categorie = Literal["RAG", "Agent", "Vision", "Fine-tuning", "Autre"]
 Niveau = Literal["junior", "confirmé", "senior", "expert"]
 
 
 class Extraction(BaseModel):
-    tjm_min: float | None = None
-    tjm_max: float | None = None
+    # Bornes larges pour ne jamais rejeter un vrai TJM (junior à expert
+    # rare) tout en bloquant les confusions salaire-annuel / valeurs
+    # aberrantes (ex: 100250 au lieu d'un TJM plausible).
+    tjm_min: float | None = Field(default=None, ge=100, le=3000)
+    tjm_max: float | None = Field(default=None, ge=100, le=3000)
     devise: str = "EUR"
     stack: list[str] = Field(default_factory=list)
     duree_valeur: int | None = None
     duree_unite: str | None = None
     niveau: Niveau | None = None
     categorie: Categorie = "Autre"
+
+    @model_validator(mode="after")
+    def _tjm_min_le_max(self) -> "Extraction":
+        if self.tjm_min is not None and self.tjm_max is not None and self.tjm_min > self.tjm_max:
+            raise ValueError("tjm_min must be <= tjm_max")
+        return self
