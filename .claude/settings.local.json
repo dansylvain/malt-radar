@@ -78,7 +78,11 @@
       "Bash(/tmp/claude-1000/-home-dsylvain-projects-malt-radar/7c2f6bad-64f2-43b6-89eb-9eb7692d78e6/scratchpad/venv/bin/pip install *)",
       "Bash(fc-list)",
       "Bash($SCRATCH/venv/bin/python *)",
-      "Bash(tmux list-sessions *)"
+      "Bash(tmux list-sessions *)",
+      "WebFetch(domain:docs.claude.com)",
+      "Skill(update-config)",
+      "Bash(grep -o '.\\\\{200\\\\}model:{id:H,display_name:rH\\(H\\)}.\\\\{800\\\\}' /usr/lib/node_modules/@anthropic-ai/claude-code/cli.js)",
+      "Bash(bash ~/.claude/statusline-command.sh)"
     ]
   }
 }
